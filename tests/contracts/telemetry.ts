@@ -6,6 +6,7 @@ export type {
   ChannelResistanceKOhm,
   SpectralBandPowers,
   RawBrainBitPacket,
+  CsvReplayStatus,
   HudCorner,
   SessionTimelinePoint,
   EEGTelemetry,

@@ -82,7 +82,10 @@ export class EEGSignalProcessor {
   private rightBuffer: number[] = [];
   private prevLeftFiltered: number | null = null;
   private prevRightFiltered: number | null = null;
+  private prevPackNum: number | null = null;
+  private droppedPackets: number = 0;
   private samplesSinceSpectrumUpdate: number = 0;
+  private spectralBaseline: SpectralBandPowers | null = null;
 
   private lastSpectrum: SpectralBandPowers = {
     theta: 33.3,
@@ -134,13 +137,42 @@ export class EEGSignalProcessor {
     this.rightBuffer = [];
     this.prevLeftFiltered = null;
     this.prevRightFiltered = null;
+    this.prevPackNum = null;
+    this.droppedPackets = 0;
     this.samplesSinceSpectrumUpdate = 0;
+  }
+
+  public setSpectralBaseline(baseline: SpectralBandPowers | null): void {
+    this.spectralBaseline = baseline ? { ...baseline } : null;
+  }
+
+  public getSpectralBaseline(): SpectralBandPowers | null {
+    return this.spectralBaseline ? { ...this.spectralBaseline } : null;
+  }
+
+  public getDroppedPackets(): number {
+    return this.droppedPackets;
   }
 
   public processSample(
     rawChannels: RawEEGChannels,
-    signalQuality: ElectrodeSignalQuality
+    signalQuality: ElectrodeSignalQuality,
+    packNum?: number
   ): BipolarProcessingSnapshot {
+    if (packNum !== undefined && Number.isInteger(packNum) && packNum >= 0) {
+      const wrapped = packNum % 2048;
+      if (this.prevPackNum !== null) {
+        const delta = (wrapped - this.prevPackNum + 2048) % 2048;
+        if (delta > 1) {
+          this.droppedPackets += delta - 1;
+          // Clear single-sample step history across packet gap so BLE loss does not trip >75 uV spike border
+          this.prevLeftFiltered = null;
+          this.prevRightFiltered = null;
+        }
+      }
+      this.prevPackNum = wrapped;
+    }
+
     const leftRaw = rawChannels.o1 - rawChannels.t3;
     const rightRaw = rawChannels.o2 - rawChannels.t4;
 
@@ -206,6 +238,7 @@ export class EEGSignalProcessor {
    */
   public toTelemetryFrame(params: {
     timestamp: number;
+    packNum?: number;
     rawChannels: RawEEGChannels;
     unit?: 'uV' | 'V';
     signalQuality: ElectrodeSignalQuality;
@@ -219,7 +252,7 @@ export class EEGSignalProcessor {
       o2: Number((params.rawChannels.o2 * scale).toFixed(2)),
     };
 
-    const snap = this.processSample(scaledChannels, params.signalQuality);
+    const snap = this.processSample(scaledChannels, params.signalQuality, params.packNum);
     return {
       timestamp: params.timestamp,
       rawChannels: scaledChannels,
@@ -273,12 +306,27 @@ export class EEGSignalProcessor {
       beta: betaPct,
     };
 
-    // Unbiased ratios: flat broadband PSD (theta == alpha == beta) maps to 50% Concentration & 50% Relaxation
+    // Pope et al. (1995) engagement ratio beta / (alpha + theta), normalized by personal resting baseline if calibrated
     const engagementRatio = betaPower / (alphaPower + thetaPower + 1e-6);
     const calmRatio = alphaPower / (betaPower + 0.6 * thetaPower + 1e-6);
 
-    const conc = 100 * (engagementRatio / (engagementRatio + 0.5));
-    const relax = 100 * (calmRatio / (calmRatio + 0.625));
+    const focusRefRatio = this.spectralBaseline
+      ? Math.max(
+          0.08,
+          this.spectralBaseline.beta /
+            (this.spectralBaseline.alpha + this.spectralBaseline.theta + 1e-6)
+        )
+      : 0.5;
+    const calmRefRatio = this.spectralBaseline
+      ? Math.max(
+          0.08,
+          this.spectralBaseline.alpha /
+            (this.spectralBaseline.beta + 0.6 * this.spectralBaseline.theta + 1e-6)
+        )
+      : 0.625;
+
+    const conc = 100 * (engagementRatio / (engagementRatio + focusRefRatio));
+    const relax = 100 * (calmRatio / (calmRatio + calmRefRatio));
 
     this.lastEstimatedConcentration = Number(Math.max(0, Math.min(100, conc)).toFixed(2));
     this.lastEstimatedRelaxation = Number(Math.max(0, Math.min(100, relax)).toFixed(2));

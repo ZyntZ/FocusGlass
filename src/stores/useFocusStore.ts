@@ -7,6 +7,7 @@ import type {
   SessionRecord,
   SessionTimelinePoint,
   HudCorner,
+  CsvReplayStatus,
   DeviceStatus,
   PresetState,
   CalibrationResult,
@@ -119,6 +120,7 @@ interface FocusStoreState {
   sessionHistory: SessionRecord[];
   sessionStartedAt: string;
   deviceStatus: DeviceStatus;
+  csvReplay: CsvReplayStatus;
   isPaused: boolean;
 
   // Controls
@@ -127,6 +129,9 @@ interface FocusStoreState {
   injectArtifact: () => void;
   togglePause: () => void;
   setElectrodeContact: (channel: 't3' | 't4' | 'o1' | 'o2', ok: boolean) => void;
+  loadCsvReplay: (fileName: string, csvText: string) => CsvReplayStatus;
+  stopCsvReplay: () => void;
+  exportRawEegCsv: () => void;
   resetSession: (saveCurrent?: boolean) => void;
   clearSessionHistory: () => void;
   exportSessionsCsv: () => void;
@@ -230,7 +235,10 @@ export const useFocusStore = create<FocusStoreState>((set, get) => {
         audioFeedback.sync(false, 0);
       }
 
-      set({ settings: updated });
+      set({
+        settings: updated,
+        csvReplay: simulationEngine.getCsvReplayStatus(),
+      });
 
       if (newSettings.deviceSource && newSettings.deviceSource !== current.deviceSource) {
         audioFeedback.sync(false, 0);
@@ -324,6 +332,7 @@ export const useFocusStore = create<FocusStoreState>((set, get) => {
       samplingRateHz: 250,
       statusMessage: 'Synthetic 4-channel EEG stream active (demo/testing mode).',
     },
+    csvReplay: simulationEngine.getCsvReplayStatus(),
     isPaused: false,
 
     activePreset: 'calm_flow',
@@ -346,6 +355,59 @@ export const useFocusStore = create<FocusStoreState>((set, get) => {
 
     setElectrodeContact: (channel, ok) => {
       simulationEngine.setElectrodeQuality(channel, ok);
+    },
+
+    loadCsvReplay: (fileName, csvText) => {
+      const status = simulationEngine.loadCsvReplay(fileName, csvText);
+      const updated = simulationEngine.getSettings();
+      savePersistedSettings(updated);
+      set({
+        settings: updated,
+        csvReplay: status,
+        deviceStatus: {
+          connected: true,
+          deviceSource: 'simulator',
+          connectionState: 'simulated',
+          batteryPercentage: 100,
+          deviceName: `CSV Replay: ${fileName}`,
+          samplingRateHz: 250,
+          statusMessage: `Replaying ${status.totalSamples} recorded 4-channel EEG samples (${status.durationSeconds}s, ${status.detectedUnit}).`,
+        },
+      });
+      return status;
+    },
+
+    stopCsvReplay: () => {
+      const status = simulationEngine.stopCsvReplay();
+      set({
+        csvReplay: status,
+        deviceStatus: {
+          connected: true,
+          deviceSource: 'simulator',
+          connectionState: 'simulated',
+          batteryPercentage: 100,
+          deviceName: 'Synthetic EEG Generator (250 Hz)',
+          samplingRateHz: 250,
+          statusMessage: 'Synthetic 4-channel EEG stream active (demo/testing mode).',
+        },
+      });
+    },
+
+    exportRawEegCsv: () => {
+      if (typeof document === 'undefined') return;
+      const frames = simulationEngine.getRawBuffer();
+      if (frames.length === 0) return;
+      const csv = simulationEngine.exportRawBufferCsv();
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      link.href = url;
+      link.download = `focusglass-eeg-250hz-${stamp}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
     },
 
     resetSession: (saveCurrent = true) => {
@@ -529,6 +591,7 @@ export const useFocusStore = create<FocusStoreState>((set, get) => {
     applyCalibration: () => {
       const { calibrationResult, updateSettings } = get();
       if (calibrationResult && (calibrationResult.sampleCount ?? 1) > 0) {
+        simulationEngine.setSpectralBaseline(calibrationResult.baselineSpectrum ?? null);
         updateSettings({ threshold: calibrationResult.recommendedThreshold });
       }
     },

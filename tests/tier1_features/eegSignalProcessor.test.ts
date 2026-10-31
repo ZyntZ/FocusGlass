@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { EEGSignalProcessor } from '../../src/services/eegSignalProcessor.ts';
 import { SimulationEngine, simulationEngine } from '../../src/services/simulationEngine.ts';
 import { BiofeedbackEngine } from '../../src/services/biofeedbackEngine.ts';
+import { parseEegCsv } from '../../src/services/csvReplayService.ts';
 import { useFocusStore } from '../../src/stores/useFocusStore.ts';
 
 const ALL_OK = { t3: true, t4: true, o1: true, o2: true };
@@ -195,5 +196,82 @@ describe('EEGSignalProcessor — Bipolar Montage, 50 Hz Notch & Spectral Powers'
     const startCorner = useFocusStore.getState().hudCorner;
     useFocusStore.getState().cycleHudCorner();
     assert.notEqual(useFocusStore.getState().hudCorner, startCorner);
+  });
+
+  it('replays 4-channel Volts CSV at 250 Hz and round-trips MNE-compatible CSV export', () => {
+    simulationEngine.stop();
+    simulationEngine.setSpectralBaseline(null);
+
+    const rows = ['time_s;T3;T4;O1;O2'];
+    for (let n = 0; n < 375; n++) {
+      const t = n / 250;
+      const alpha = 26e-6 * Math.sin(2 * Math.PI * 10 * t);
+      rows.push(`${t.toFixed(3)};0;0;${alpha.toExponential(5)};${alpha.toExponential(5)}`);
+    }
+
+    const replayStatus = useFocusStore.getState().loadCsvReplay('eyes_closed_alpha.csv', rows.join('\n'));
+    assert.equal(replayStatus.active, true);
+    assert.equal(replayStatus.detectedUnit, 'V');
+    assert.equal(replayStatus.totalSamples, 375);
+
+    for (let i = 0; i < 95; i++) {
+      simulationEngine.stepSamples(4);
+    }
+
+    const telem = useFocusStore.getState().telemetry;
+    assert.ok(telem && telem.spectrum && telem.spectrum.alpha > 85);
+    assert.ok(telem && telem.relaxation > 75);
+
+    const exportedCsv = simulationEngine.exportRawBufferCsv();
+    const reparsed = parseEegCsv(exportedCsv);
+    assert.equal(reparsed.detectedUnit, 'uV');
+    assert.equal(reparsed.samples.length, 380);
+
+    useFocusStore.getState().stopCsvReplay();
+    assert.equal(useFocusStore.getState().csvReplay.active, false);
+  });
+
+  it('normalizes engagement index against personal resting spectral baseline (K_calib)', () => {
+    const dsp = new EEGSignalProcessor(250);
+    // Simulate a subject with high resting Alpha (~65%) and modest Beta (~20%)
+    const feedMix = () => {
+      let snap = dsp.processSample({ t3: 0, t4: 0, o1: 0, o2: 0 }, ALL_OK);
+      for (let n = 0; n < 300; n++) {
+        const t = n / 250;
+        const sig =
+          8 * Math.sin(2 * Math.PI * 6 * t) +
+          24 * Math.sin(2 * Math.PI * 10 * t) +
+          22 * Math.sin(2 * Math.PI * 20 * t);
+        snap = dsp.processSample({ t3: 0, t4: 0, o1: sig, o2: sig }, ALL_OK);
+      }
+      return snap;
+    };
+
+    const uncalibrated = feedMix();
+    assert.ok(uncalibrated.estimatedConcentration < 38);
+
+    dsp.reset();
+    dsp.setSpectralBaseline(uncalibrated.spectrum);
+    const calibrated = feedMix();
+    assert.ok(
+      calibrated.estimatedConcentration >= 47 && calibrated.estimatedConcentration <= 53,
+      `Expected personal baseline state to normalize near 50%, got ${calibrated.estimatedConcentration}%`
+    );
+  });
+
+  it('tracks BrainBit PackNum (0..2047) wraparound and prevents false spike artifacts on packet gaps', () => {
+    const dsp = new EEGSignalProcessor(250);
+
+    // Clean wraparound 2046 -> 2047 -> 0 -> 1
+    dsp.processSample({ t3: 0, t4: 0, o1: 10, o2: 10 }, ALL_OK, 2046);
+    dsp.processSample({ t3: 0, t4: 0, o1: 12, o2: 12 }, ALL_OK, 2047);
+    dsp.processSample({ t3: 0, t4: 0, o1: 14, o2: 14 }, ALL_OK, 0);
+    dsp.processSample({ t3: 0, t4: 0, o1: -45, o2: -45 }, ALL_OK, 1);
+    assert.equal(dsp.getDroppedPackets(), 0);
+
+    // Simulate 3 dropped BLE packets (2, 3, 4 missed -> next is 5) with +95 uV jump (-45 -> +50 uV)
+    const afterGap = dsp.processSample({ t3: 0, t4: 0, o1: 50, o2: 50 }, ALL_OK, 5);
+    assert.equal(dsp.getDroppedPackets(), 3);
+    assert.equal(afterGap.bothSidesArtifacted, false);
   });
 });

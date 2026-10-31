@@ -7,9 +7,13 @@ import type {
   ElectrodeSignalQuality,
   ChannelResistanceKOhm,
   RawBrainBitPacket,
+  RawEEGChannels,
+  CsvReplayStatus,
+  SpectralBandPowers,
 } from './eegTypes';
 import { BiofeedbackEngine, DEFAULT_SETTINGS } from './biofeedbackEngine';
 import { EEGSignalProcessor } from './eegSignalProcessor';
+import { parseEegCsv, formatRawBufferToCsv } from './csvReplayService';
 
 type TelemetrySubscriber = (
   telemetry: EEGTelemetry,
@@ -47,6 +51,11 @@ export class SimulationEngine {
 
   private subscribers: Set<TelemetrySubscriber> = new Set();
   private rawBatchBuffer: EEGTelemetry[] = [];
+
+  private csvSamples: RawEEGChannels[] = [];
+  private csvCursor: number = 0;
+  private csvFileName: string | null = null;
+  private csvDetectedUnit: 'uV' | 'V' = 'uV';
 
   constructor() {
     this.setupKeyboardShortcuts();
@@ -172,12 +181,65 @@ export class SimulationEngine {
     const quality = packet.signalQuality ?? { t3: true, t4: true, o1: true, o2: true };
     const frame = this.signalProcessor.toTelemetryFrame({
       timestamp: packet.timestamp ?? Date.now(),
+      packNum: packet.packNum,
       rawChannels: packet.rawChannels,
       unit: packet.unit,
       signalQuality: quality,
       resistanceKOhm: packet.resistanceKOhm,
     });
     return this.ingestExternalTelemetry(frame);
+  }
+
+  public loadCsvReplay(fileName: string, csvText: string): CsvReplayStatus {
+    const parsed = parseEegCsv(csvText);
+    this.csvSamples = parsed.samples;
+    this.csvCursor = 0;
+    this.csvFileName = fileName;
+    this.csvDetectedUnit = parsed.detectedUnit;
+    this.signalQuality = { t3: true, t4: true, o1: true, o2: true };
+    this.signalProcessor.reset();
+    this.rawBatchBuffer = [];
+
+    if (this.settings.deviceSource !== 'simulator') {
+      this.updateSettings({ deviceSource: 'simulator' });
+    }
+
+    return this.getCsvReplayStatus();
+  }
+
+  public stopCsvReplay(): CsvReplayStatus {
+    this.csvSamples = [];
+    this.csvCursor = 0;
+    this.csvFileName = null;
+    this.csvDetectedUnit = 'uV';
+    this.signalProcessor.reset();
+    return this.getCsvReplayStatus();
+  }
+
+  public getCsvReplayStatus(): CsvReplayStatus {
+    return {
+      active: this.csvSamples.length > 0 && this.settings.deviceSource === 'simulator',
+      fileName: this.csvSamples.length > 0 ? this.csvFileName : null,
+      totalSamples: this.csvSamples.length,
+      durationSeconds: Number((this.csvSamples.length / this.sampleRateHz).toFixed(2)),
+      detectedUnit: this.csvDetectedUnit,
+    };
+  }
+
+  public setSpectralBaseline(baseline: SpectralBandPowers | null): void {
+    this.signalProcessor.setSpectralBaseline(baseline);
+  }
+
+  public getSpectralBaseline(): SpectralBandPowers | null {
+    return this.signalProcessor.getSpectralBaseline();
+  }
+
+  public getDroppedPackets(): number {
+    return this.signalProcessor.getDroppedPackets();
+  }
+
+  public exportRawBufferCsv(): string {
+    return formatRawBufferToCsv(this.rawBatchBuffer);
   }
 
   public updateSettings(newSettings: Partial<FocusGlassSettings>): void {
@@ -191,6 +253,9 @@ export class SimulationEngine {
     }
 
     if (prevSource !== this.settings.deviceSource && this.settings.deviceSource === 'bluetooth') {
+      this.csvSamples = [];
+      this.csvCursor = 0;
+      this.csvFileName = null;
       this.rawBatchBuffer = [];
       if (this.latestTelemetry) {
         const safeState: BiofeedbackFeedbackState = {
@@ -285,6 +350,16 @@ export class SimulationEngine {
   private generateSample(): EEGTelemetry {
     const dt = 1 / this.sampleRateHz;
     this.currentTimestamp += Math.round(dt * 1000);
+
+    if (this.csvSamples.length > 0) {
+      const sample = this.csvSamples[this.csvCursor];
+      this.csvCursor = (this.csvCursor + 1) % this.csvSamples.length;
+      return this.signalProcessor.toTelemetryFrame({
+        timestamp: this.currentTimestamp,
+        rawChannels: sample,
+        signalQuality: { ...this.signalQuality },
+      });
+    }
 
     this.phaseAlpha += 2 * Math.PI * 10.0 * dt;
     this.phaseBeta += 2 * Math.PI * 21.0 * dt;

@@ -36,22 +36,40 @@ export const App: React.FC = () => {
     setActiveTab,
     settings,
     deviceStatus,
+    csvReplay,
     telemetry,
     isPaused,
   } = useFocusStore();
 
-  // Ctrl+Shift+G (глобальный хоткей в Rust) выключает click-through — синхронизируем состояние
+  // Синхронизация событий от глобального хоткея Ctrl+Shift+G и системного трея Windows
   React.useEffect(() => {
     if (!('__TAURI_INTERNALS__' in window)) return;
-    let unlisten: (() => void) | undefined;
-    import('@tauri-apps/api/event')
-      .then(({ listen }) =>
-        listen('click-through-disabled', () => useFocusStore.setState({ isClickThrough: false }))
-      )
-      .then((fn) => {
-        unlisten = fn;
+    const unlisteners: Array<() => void> = [];
+    let cancelled = false;
+
+    import('@tauri-apps/api/event').then(async ({ listen }) => {
+      const u1 = await listen('click-through-disabled', () => {
+        useFocusStore.setState({ isClickThrough: false });
       });
-    return () => unlisten?.();
+      const u2 = await listen('tray-open-dashboard', () => {
+        useFocusStore.setState({ viewMode: 'dashboard', isClickThrough: false });
+      });
+      const u3 = await listen('tray-open-hud', () => {
+        useFocusStore.setState({ viewMode: 'hud' });
+      });
+      if (cancelled) {
+        u1();
+        u2();
+        u3();
+      } else {
+        unlisteners.push(u1, u2, u3);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      unlisteners.forEach((fn) => fn());
+    };
   }, []);
 
   const isSimulator = settings.deviceSource === 'simulator';
@@ -117,9 +135,15 @@ export const App: React.FC = () => {
             {/* Center: Device Badge */}
             <div className="hidden md:flex items-center gap-2">
               {isSimulator ? (
-                <GlassBadge variant="orange" pulse={!isPaused}>
-                  Simulator · 250 Hz
-                </GlassBadge>
+                csvReplay.active ? (
+                  <GlassBadge variant="cyan" pulse={!isPaused}>
+                    CSV Replay · 250 Hz
+                  </GlassBadge>
+                ) : (
+                  <GlassBadge variant="orange" pulse={!isPaused}>
+                    Simulator · 250 Hz
+                  </GlassBadge>
+                )
               ) : isBleConnected ? (
                 <GlassBadge variant="cyan" pulse={true}>
                   BrainBit BLE · Connected
@@ -242,7 +266,11 @@ export const App: React.FC = () => {
               {isSimulator ? (
                 <span className="flex items-center gap-1.5 text-amber-300 font-mono">
                   <Activity className="w-3 h-3" />
-                  {isPaused ? 'Simulator Paused' : '250 Hz Synthetic Telemetry'}
+                  {isPaused
+                    ? 'Stream Paused'
+                    : csvReplay.active
+                    ? `250 Hz CSV Replay (${csvReplay.fileName})`
+                    : '250 Hz Synthetic Telemetry'}
                 </span>
               ) : isBleConnected ? (
                 <span className="flex items-center gap-1.5 text-emerald-400 font-mono">

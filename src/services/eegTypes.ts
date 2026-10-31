@@ -31,10 +31,19 @@ export interface SpectralBandPowers {
 
 export interface RawBrainBitPacket {
   timestamp?: number;
+  packNum?: number; // BrainBitSignalData.PackNum (0..2047 modulo 2048)
   rawChannels: RawEEGChannels;
   unit?: 'uV' | 'V'; // NeuroSDK2 SignalData arrives in Volts ('V'); internal pipeline uses 'uV'
   signalQuality?: ElectrodeSignalQuality;
   resistanceKOhm?: ChannelResistanceKOhm;
+}
+
+export interface CsvReplayStatus {
+  active: boolean;
+  fileName: string | null;
+  totalSamples: number;
+  durationSeconds: number;
+  detectedUnit: 'uV' | 'V';
 }
 
 export type HudCorner = 'top-right' | 'bottom-right' | 'bottom-left' | 'top-left';

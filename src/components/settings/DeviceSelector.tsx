@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Bluetooth,
   Radio,
@@ -6,6 +6,10 @@ import {
   RefreshCw,
   Smartphone,
   AlertTriangle,
+  FileSpreadsheet,
+  Upload,
+  Square,
+  Download,
 } from 'lucide-react';
 import { useFocusStore } from '../../stores/useFocusStore';
 import { tauriBridge } from '../../services/tauriBridge';
@@ -14,10 +18,22 @@ import { GlassButton } from '../glass/GlassButton';
 import { GlassBadge } from '../glass/GlassBadge';
 
 export const DeviceSelector: React.FC = () => {
-  const { settings, updateSettings, deviceStatus } = useFocusStore();
+  const {
+    settings,
+    updateSettings,
+    deviceStatus,
+    csvReplay,
+    loadCsvReplay,
+    stopCsvReplay,
+    exportRawEegCsv,
+    telemetry,
+  } = useFocusStore();
+
   const [isScanning, setIsScanning] = useState(false);
   const [discoveredDevices, setDiscoveredDevices] = useState<DiscoveredBrainBitDevice[]>([]);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
+  const [csvError, setCsvError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleScan = async () => {
     setIsScanning(true);
@@ -28,6 +44,20 @@ export const DeviceSelector: React.FC = () => {
       setScanMessage(res.message);
     } finally {
       setIsScanning(false);
+    }
+  };
+
+  const handleCsvFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setCsvError(null);
+    try {
+      const text = await file.text();
+      loadCsvReplay(file.name, text);
+    } catch (err) {
+      setCsvError(err instanceof Error ? err.message : 'Failed to parse EEG CSV file.');
     }
   };
 
@@ -51,12 +81,17 @@ export const DeviceSelector: React.FC = () => {
         >
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-bold text-white flex items-center gap-1.5">
-              <Radio className="w-3.5 h-3.5 text-[#FF6600]" /> Synthetic Simulator
+              <Radio className="w-3.5 h-3.5 text-[#FF6600]" />{' '}
+              {csvReplay.active ? 'CSV Dataset Replay' : 'Synthetic Simulator'}
             </span>
-            {isSimulator && <GlassBadge variant="orange">Active</GlassBadge>}
+            {isSimulator && (
+              <GlassBadge variant={csvReplay.active ? 'cyan' : 'orange'}>
+                {csvReplay.active ? 'Replay' : 'Active'}
+              </GlassBadge>
+            )}
           </div>
           <p className="text-[11px] text-slate-300">
-            250 Hz synthetic Alpha/Beta/Theta generator with hotkeys 1-5 for offline testing and demos.
+            250 Hz offline stream (synthetic rhythms or recorded 4-channel EEG dataset).
           </p>
         </button>
 
@@ -93,10 +128,17 @@ export const DeviceSelector: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             {isSimulator ? (
-              <>
-                <span className="text-xs text-amber-300 font-mono">VIRTUAL</span>
-                <GlassBadge variant="orange">Simulated</GlassBadge>
-              </>
+              csvReplay.active ? (
+                <>
+                  <span className="text-xs text-cyan-300 font-mono">DATASET</span>
+                  <GlassBadge variant="cyan">CSV Replay</GlassBadge>
+                </>
+              ) : (
+                <>
+                  <span className="text-xs text-amber-300 font-mono">VIRTUAL</span>
+                  <GlassBadge variant="orange">Simulated</GlassBadge>
+                </>
+              )
             ) : isBleConnected ? (
               <>
                 <span className="text-xs text-emerald-400 flex items-center gap-1 font-mono">
@@ -116,7 +158,9 @@ export const DeviceSelector: React.FC = () => {
         <div className="space-y-1.5 text-xs text-slate-300">
           <div className="flex justify-between py-1 border-b border-white/5">
             <span className="text-slate-400">Source</span>
-            <span className="font-mono text-white">{deviceStatus.deviceName}</span>
+            <span className="font-mono text-white truncate max-w-[260px]">
+              {deviceStatus.deviceName}
+            </span>
           </div>
           <div className="flex justify-between py-1 border-b border-white/5">
             <span className="text-slate-400">Target Sampling Rate</span>
@@ -126,7 +170,9 @@ export const DeviceSelector: React.FC = () => {
           </div>
           <div className="flex justify-between py-1 border-b border-white/5">
             <span className="text-slate-400">Montage (10-20)</span>
-            <span className="font-mono text-white">4 ch (T3, T4, O1, O2 · bipolar O1-T3 / O2-T4)</span>
+            <span className="font-mono text-white">
+              4 ch (T3, T4, O1, O2 · bipolar O1-T3 / O2-T4)
+            </span>
           </div>
         </div>
 
@@ -183,6 +229,69 @@ export const DeviceSelector: React.FC = () => {
               </div>
             )}
           </div>
+        )}
+      </div>
+
+      {/* Offline EEG Dataset Replay & Raw 250 Hz Export (MNE-Python / BrainBit CSV) */}
+      <div className="p-4 rounded-xl bg-slate-900/60 border border-white/10 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <FileSpreadsheet className="w-4 h-4 text-[#00D2FF]" />
+            <div>
+              <span className="text-xs font-semibold text-white block">
+                Recorded EEG Dataset (CSV Replay &amp; MNE Export)
+              </span>
+              <span className="text-[11px] text-slate-400">
+                Stream a 4-channel CSV (T3, T4, O1, O2 in uV or V) through the live 250 Hz DSP
+              </span>
+            </div>
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,.tsv,.txt"
+            onChange={handleCsvFileChange}
+            className="hidden"
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <GlassButton
+            size="sm"
+            variant="secondary"
+            onClick={() => fileInputRef.current?.click()}
+            icon={<Upload className="w-3.5 h-3.5" />}
+          >
+            Load 4-ch EEG CSV
+          </GlassButton>
+
+          {csvReplay.active && (
+            <GlassButton
+              size="sm"
+              variant="secondary"
+              onClick={() => stopCsvReplay()}
+              icon={<Square className="w-3 h-3" />}
+            >
+              Stop Replay (Back to Synth)
+            </GlassButton>
+          )}
+
+          <GlassButton
+            size="sm"
+            variant="primary"
+            disabled={!telemetry}
+            onClick={() => exportRawEegCsv()}
+            icon={<Download className="w-3.5 h-3.5" />}
+          >
+            Export Raw 250 Hz Buffer (.csv)
+          </GlassButton>
+        </div>
+
+        {csvError && (
+          <p className="text-[11px] text-rose-300 p-2 rounded-lg bg-rose-500/10 border border-rose-500/30">
+            {csvError}
+          </p>
         )}
       </div>
     </div>
