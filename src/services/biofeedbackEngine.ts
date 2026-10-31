@@ -271,6 +271,24 @@ export class BiofeedbackEngine {
     );
     const confidence = Math.max(0.1, Math.min(1.0, 1 - stdDev / 50));
 
+    const framesWithSpectrum = validFrames.filter((f) => f.spectrum !== undefined);
+    let baselineSpectrum: CalibrationResult['baselineSpectrum'] = undefined;
+    if (framesWithSpectrum.length > 0) {
+      const meanTheta =
+        framesWithSpectrum.reduce((acc, f) => acc + (f.spectrum?.theta ?? 0), 0) /
+        framesWithSpectrum.length;
+      const meanAlpha =
+        framesWithSpectrum.reduce((acc, f) => acc + (f.spectrum?.alpha ?? 0), 0) /
+        framesWithSpectrum.length;
+      const tPct = Number(meanTheta.toFixed(1));
+      const aPct = Number(meanAlpha.toFixed(1));
+      baselineSpectrum = {
+        theta: tPct,
+        alpha: aPct,
+        beta: Number(Math.max(0, 100 - tPct - aPct).toFixed(1)),
+      };
+    }
+
     return {
       baselineFocus: Number(avgFocus.toFixed(2)),
       baselineRelaxation: Number(avgRelax.toFixed(2)),
@@ -278,6 +296,7 @@ export class BiofeedbackEngine {
       confidence: Number(confidence.toFixed(2)),
       mode,
       sampleCount: validFrames.length,
+      baselineSpectrum,
     };
   }
 }

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
-use tauri::{State, Window};
+use tauri::{AppHandle, Manager, State, Window};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -136,6 +136,33 @@ pub fn toggle_always_on_top(window: Window, enabled: bool) -> Result<bool, Strin
         .set_always_on_top(enabled)
         .map_err(|e| format!("Failed to set always on top: {}", e))?;
     Ok(enabled)
+}
+
+#[tauri::command]
+pub fn load_session_history(app: AppHandle) -> Result<String, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
+    let file_path = dir.join("sessions.json");
+    if !file_path.exists() {
+        return Ok("[]".to_string());
+    }
+    std::fs::read_to_string(&file_path)
+        .map_err(|e| format!("Failed to read sessions.json: {}", e))
+}
+
+#[tauri::command]
+pub fn save_session_history(app: AppHandle, payload: String) -> Result<(), String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create app data dir: {}", e))?;
+    let file_path = dir.join("sessions.json");
+    std::fs::write(&file_path, payload)
+        .map_err(|e| format!("Failed to write sessions.json: {}", e))
 }
 
 #[tauri::command]

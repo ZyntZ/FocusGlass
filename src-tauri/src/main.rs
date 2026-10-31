@@ -39,6 +39,8 @@ fn main() {
             commands::get_device_status,
             commands::set_device_source,
             commands::scan_brainbit_devices,
+            commands::load_session_history,
+            commands::save_session_history,
             commands::toggle_always_on_top,
             commands::minimize_window,
             commands::close_window

@@ -32,8 +32,20 @@ export interface SpectralBandPowers {
 export interface RawBrainBitPacket {
   timestamp?: number;
   rawChannels: RawEEGChannels;
+  unit?: 'uV' | 'V'; // NeuroSDK2 SignalData arrives in Volts ('V'); internal pipeline uses 'uV'
   signalQuality?: ElectrodeSignalQuality;
   resistanceKOhm?: ChannelResistanceKOhm;
+}
+
+export type HudCorner = 'top-right' | 'bottom-right' | 'bottom-left' | 'top-left';
+
+export interface SessionTimelinePoint {
+  elapsedSeconds: number;
+  concentration: number;
+  relaxation: number;
+  smoothedMetric: number;
+  threshold: number;
+  isDimmingActive: boolean;
 }
 
 export interface EEGTelemetry {
@@ -126,6 +138,7 @@ export interface CalibrationResult {
   confidence: number;
   mode?: 'concentration' | 'relaxation';
   sampleCount?: number;
+  baselineSpectrum?: SpectralBandPowers;
 }
 
 export type PresetState =

@@ -6,6 +6,8 @@ export type {
   ChannelResistanceKOhm,
   SpectralBandPowers,
   RawBrainBitPacket,
+  HudCorner,
+  SessionTimelinePoint,
   EEGTelemetry,
   FocusGlassSettings,
   BiofeedbackFeedbackState,

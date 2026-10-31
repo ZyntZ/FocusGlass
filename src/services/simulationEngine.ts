@@ -173,6 +173,7 @@ export class SimulationEngine {
     const frame = this.signalProcessor.toTelemetryFrame({
       timestamp: packet.timestamp ?? Date.now(),
       rawChannels: packet.rawChannels,
+      unit: packet.unit,
       signalQuality: quality,
       resistanceKOhm: packet.resistanceKOhm,
     });

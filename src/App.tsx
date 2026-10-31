@@ -7,12 +7,14 @@ import {
   Pin,
   Activity,
   Sliders,
+  BarChart3,
 } from 'lucide-react';
 import { useFocusStore } from './stores/useFocusStore';
 import { GlassPanel } from './components/glass/GlassPanel';
 import { GlassButton } from './components/glass/GlassButton';
 import { GlassBadge } from './components/glass/GlassBadge';
 import { BentoMetricGrid } from './components/dashboard/BentoMetricGrid';
+import { SessionAnalyticsView } from './components/dashboard/SessionAnalyticsView';
 import { FocusBarHUD } from './components/hud/FocusBarHUD';
 import { BiofeedbackOverlay } from './components/overlay/BiofeedbackOverlay';
 import { SettingsModal } from './components/settings/SettingsModal';
@@ -30,6 +32,8 @@ export const App: React.FC = () => {
     isAlwaysOnTop,
     toggleAlwaysOnTop,
     setIsSettingsOpen,
+    activeTab,
+    setActiveTab,
     settings,
     deviceStatus,
     telemetry,
@@ -199,9 +203,37 @@ export const App: React.FC = () => {
             </div>
           </GlassPanel>
 
-          {/* Main Dashboard Bento Grid */}
+          {/* Main Dashboard View Switcher */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-slate-950/50 border border-white/10 backdrop-blur-md">
+              <button
+                onClick={() => setActiveTab('monitor')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  activeTab !== 'analytics'
+                    ? 'bg-[#FF6600]/25 text-white border border-[#FF6600]/50 shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Activity className="w-3.5 h-3.5 text-[#FF6600]" />
+                Live Monitor
+              </button>
+              <button
+                onClick={() => setActiveTab('analytics')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  activeTab === 'analytics'
+                    ? 'bg-[#00D2FF]/20 text-white border border-[#00D2FF]/45 shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <BarChart3 className="w-3.5 h-3.5 text-[#00D2FF]" />
+                Session Analytics
+              </button>
+            </div>
+          </div>
+
+          {/* Main Dashboard Content */}
           <main className="flex-1">
-            <BentoMetricGrid />
+            {activeTab === 'analytics' ? <SessionAnalyticsView /> : <BentoMetricGrid />}
           </main>
 
           {/* Bottom Status Ribbon */}

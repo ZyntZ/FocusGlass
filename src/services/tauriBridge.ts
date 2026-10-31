@@ -3,6 +3,7 @@ import type {
   DeviceStatus,
   EEGTelemetry,
   RawBrainBitPacket,
+  SessionRecord,
 } from './eegTypes';
 
 class TauriBridge {
@@ -138,6 +139,35 @@ class TauriBridge {
     } catch (err) {
       console.warn('[TauriBridge] Failed to subscribe to brainbit-raw-signal:', err);
       return () => {};
+    }
+  }
+
+  public async loadSessionHistory(): Promise<SessionRecord[] | null> {
+    if (!this.isTauriAvailable()) {
+      return null;
+    }
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const raw = await invoke<string>('load_session_history');
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? (parsed as SessionRecord[]) : [];
+    } catch (err) {
+      console.warn('[TauriBridge] Failed to load session history from disk:', err);
+      return null;
+    }
+  }
+
+  public async saveSessionHistory(records: SessionRecord[]): Promise<void> {
+    if (!this.isTauriAvailable()) {
+      return;
+    }
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke<void>('save_session_history', {
+        payload: JSON.stringify(records.slice(0, 100)),
+      });
+    } catch (err) {
+      console.warn('[TauriBridge] Failed to save session history to disk:', err);
     }
   }
 

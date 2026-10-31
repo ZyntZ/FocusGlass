@@ -8,6 +8,7 @@ import {
   Play,
   Pause,
   AlertCircle,
+  Move,
 } from 'lucide-react';
 import { useFocusStore } from '../../stores/useFocusStore';
 import { GlassPanel } from '../glass/GlassPanel';
@@ -22,6 +23,8 @@ export const FocusBarHUD: React.FC = () => {
     toggleClickThrough,
     setIsSettingsOpen,
     setViewMode,
+    hudCorner,
+    cycleHudCorner,
     isPaused,
     togglePause,
     activePreset,
@@ -36,8 +39,17 @@ export const FocusBarHUD: React.FC = () => {
   const threshold = settings.threshold;
   const isBelowThreshold = isStreamActive && feedbackState.isContactOk && score < threshold;
 
+  const cornerClass =
+    hudCorner === 'bottom-right'
+      ? 'bottom-5 right-5'
+      : hudCorner === 'bottom-left'
+      ? 'bottom-5 left-5'
+      : hudCorner === 'top-left'
+      ? 'top-5 left-5'
+      : 'top-5 right-5';
+
   return (
-    <div className="fixed top-5 right-5 z-50 select-none animate-in fade-in duration-300">
+    <div className={`fixed ${cornerClass} z-50 select-none animate-in fade-in duration-300`}>
       <GlassPanel
         variant="primary"
         glow={isBelowThreshold ? 'orange' : 'cyan'}
@@ -78,6 +90,13 @@ export const FocusBarHUD: React.FC = () => {
                 )}
               </button>
             )}
+            <button
+              onClick={() => cycleHudCorner()}
+              title={`Move HUD Corner (current: ${hudCorner})`}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              <Move className="w-3.5 h-3.5" />
+            </button>
             <button
               onClick={() => setViewMode('dashboard')}
               title="Open Full Dashboard"

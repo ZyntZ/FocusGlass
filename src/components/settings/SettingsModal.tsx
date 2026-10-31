@@ -221,6 +221,23 @@ export const SettingsModal: React.FC = () => {
                       </div>
                     </div>
 
+                    {calibrationResult.baselineSpectrum && (
+                      <div className="px-3 py-2 rounded-lg bg-black/25 border border-white/10 flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono">
+                        <span className="text-slate-400">Resting Spectral Profile:</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-amber-300">
+                            θ {calibrationResult.baselineSpectrum.theta.toFixed(1)}%
+                          </span>
+                          <span className="text-violet-300">
+                            α {calibrationResult.baselineSpectrum.alpha.toFixed(1)}%
+                          </span>
+                          <span className="text-cyan-300">
+                            β {calibrationResult.baselineSpectrum.beta.toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-end gap-2 pt-2">
                       <GlassButton
                         size="sm"

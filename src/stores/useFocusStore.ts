@@ -5,6 +5,8 @@ import type {
   BiofeedbackFeedbackState,
   SessionStatistics,
   SessionRecord,
+  SessionTimelinePoint,
+  HudCorner,
   DeviceStatus,
   PresetState,
   CalibrationResult,
@@ -16,6 +18,27 @@ import { tauriBridge } from '../services/tauriBridge';
 
 const SETTINGS_STORAGE_KEY = 'focusglass.settings.v1';
 const SESSIONS_STORAGE_KEY = 'focusglass.sessions.v1';
+const HUD_CORNER_STORAGE_KEY = 'focusglass.hudCorner.v1';
+const HUD_CORNERS: HudCorner[] = ['top-right', 'bottom-right', 'bottom-left', 'top-left'];
+
+function loadHudCorner(): HudCorner {
+  if (typeof window === 'undefined' || !window.localStorage) return 'top-right';
+  try {
+    const raw = window.localStorage.getItem(HUD_CORNER_STORAGE_KEY) as HudCorner | null;
+    return raw && HUD_CORNERS.includes(raw) ? raw : 'top-right';
+  } catch {
+    return 'top-right';
+  }
+}
+
+function saveHudCorner(corner: HudCorner): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    window.localStorage.setItem(HUD_CORNER_STORAGE_KEY, corner);
+  } catch {
+    // Ignore storage quota errors
+  }
+}
 
 function loadPersistedSettings(): FocusGlassSettings {
   if (typeof window === 'undefined' || !window.localStorage) {
@@ -74,6 +97,8 @@ interface FocusStoreState {
   // View & Window
   viewMode: 'dashboard' | 'hud';
   setViewMode: (mode: 'dashboard' | 'hud') => void;
+  hudCorner: HudCorner;
+  cycleHudCorner: () => void;
   isClickThrough: boolean;
   setClickThrough: (enabled: boolean) => Promise<void>;
   toggleClickThrough: () => Promise<void>;
@@ -90,6 +115,7 @@ interface FocusStoreState {
   telemetry: EEGTelemetry | null;
   feedbackState: BiofeedbackFeedbackState;
   sessionStats: SessionStatistics;
+  sessionTimeline: SessionTimelinePoint[];
   sessionHistory: SessionRecord[];
   sessionStartedAt: string;
   deviceStatus: DeviceStatus;
@@ -102,6 +128,7 @@ interface FocusStoreState {
   togglePause: () => void;
   setElectrodeContact: (channel: 't3' | 't4' | 'o1' | 'o2', ok: boolean) => void;
   resetSession: (saveCurrent?: boolean) => void;
+  clearSessionHistory: () => void;
   exportSessionsCsv: () => void;
 
   // Calibration
@@ -120,6 +147,7 @@ export const useFocusStore = create<FocusStoreState>((set, get) => {
   const initialSettings = loadPersistedSettings();
   let calibrationFrames: EEGTelemetry[] = [];
   let calibrationTimer: ReturnType<typeof setInterval> | null = null;
+  let lastRecordedSecond = 0;
 
   simulationEngine.subscribe((telemetry, feedbackState, sessionStats) => {
     const state = get();
@@ -136,10 +164,29 @@ export const useFocusStore = create<FocusStoreState>((set, get) => {
 
     audioFeedback.sync(shouldPlayAudio, feedbackState.audioVolume);
 
+    const wholeSecond = Math.floor(sessionStats.durationSeconds);
+    let nextTimeline = state.sessionTimeline;
+    if (wholeSecond >= 1 && wholeSecond > lastRecordedSecond) {
+      lastRecordedSecond = wholeSecond;
+      const point: SessionTimelinePoint = {
+        elapsedSeconds: wholeSecond,
+        concentration: telemetry.concentration,
+        relaxation: telemetry.relaxation,
+        smoothedMetric: feedbackState.smoothedMetric,
+        threshold: state.settings.threshold,
+        isDimmingActive: feedbackState.isDimmingActive,
+      };
+      nextTimeline =
+        state.sessionTimeline.length >= 1800
+          ? [...state.sessionTimeline.slice(-1799), point]
+          : [...state.sessionTimeline, point];
+    }
+
     set({
       telemetry,
       feedbackState,
       sessionStats,
+      sessionTimeline: nextTimeline,
       activePreset: simulationEngine.getPreset(),
       isPaused: simulationEngine.getIsPaused(),
     });
@@ -149,6 +196,13 @@ export const useFocusStore = create<FocusStoreState>((set, get) => {
 
   void tauriBridge.getDeviceStatus().then((status) => {
     set({ deviceStatus: status });
+  });
+
+  void tauriBridge.loadSessionHistory().then((diskHistory) => {
+    if (diskHistory && diskHistory.length > 0) {
+      saveSessionHistory(diskHistory);
+      set({ sessionHistory: diskHistory });
+    }
   });
 
   void tauriBridge.onBrainBitTelemetry((packet) => {
@@ -195,6 +249,14 @@ export const useFocusStore = create<FocusStoreState>((set, get) => {
         set({ viewMode: mode });
       }
       void tauriBridge.setOverlayMode(mode === 'hud');
+    },
+
+    hudCorner: loadHudCorner(),
+    cycleHudCorner: () => {
+      const idx = HUD_CORNERS.indexOf(get().hudCorner);
+      const next = HUD_CORNERS[(idx + 1) % HUD_CORNERS.length];
+      saveHudCorner(next);
+      set({ hudCorner: next });
     },
 
     isClickThrough: false,
@@ -250,6 +312,7 @@ export const useFocusStore = create<FocusStoreState>((set, get) => {
       maxFocusScore: 0,
       artifactCount: 0,
     },
+    sessionTimeline: [],
     sessionHistory: loadSessionHistory(),
     sessionStartedAt: new Date().toISOString(),
     deviceStatus: {
@@ -299,17 +362,26 @@ export const useFocusStore = create<FocusStoreState>((set, get) => {
           deviceSource: settings.deviceSource,
           threshold: settings.threshold,
         };
-        updatedHistory = [record, ...sessionHistory].slice(0, 50);
+        updatedHistory = [record, ...sessionHistory].slice(0, 100);
         saveSessionHistory(updatedHistory);
+        void tauriBridge.saveSessionHistory(updatedHistory);
       }
 
+      lastRecordedSecond = 0;
       simulationEngine.resetSession();
       audioFeedback.sync(false, 0);
       set({
         sessionHistory: updatedHistory,
+        sessionTimeline: [],
         sessionStartedAt: new Date().toISOString(),
         sessionStats: simulationEngine.getSessionStats(),
       });
+    },
+
+    clearSessionHistory: () => {
+      saveSessionHistory([]);
+      void tauriBridge.saveSessionHistory([]);
+      set({ sessionHistory: [] });
     },
 
     exportSessionsCsv: () => {

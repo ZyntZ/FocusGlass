@@ -52,12 +52,17 @@ export interface BipolarProcessingSnapshot {
   estimatedRelaxation: number;
 }
 
+const THETA_BINS_COUNT = 4; // 4..7 Hz
+const ALPHA_BINS_COUNT = 6; // 8..13 Hz
+const BETA_BINS_COUNT = 17; // 14..30 Hz
+
 /**
  * Real-time 4-channel BrainBit signal processor:
  * - Differential bipolar derivations: Left (O1 - T3) and Right (O2 - T4)
  * - 2nd-order 50 Hz IIR notch filter per hemisphere
  * - Per-hemisphere amplitude (> 110 uV, BrainBit SDK art_bord) & step (> 75 uV) artifact rejection
- * - 1-second (250-sample) Hamming-windowed Goertzel band power estimation (Theta 4-7 Hz, Alpha 8-13 Hz, Beta 14-30 Hz)
+ * - 1-second (250-sample) Hamming-windowed Goertzel PSD estimation normalized by band width
+ *   (uV^2/Hz, matching EmotionalMath set_spect_normalization_by_bands_width = true)
  */
 export class EEGSignalProcessor {
   private readonly sampleRateHz: number;
@@ -65,6 +70,7 @@ export class EEGSignalProcessor {
   private readonly stepSamples: number;
   private readonly amplitudeBorderUv: number;
   private readonly stepJumpBorderUv: number;
+  private readonly normalizeByBandwidth: boolean;
 
   private readonly notchLeft: BiquadNotch50Hz;
   private readonly notchRight: BiquadNotch50Hz;
@@ -79,12 +85,12 @@ export class EEGSignalProcessor {
   private samplesSinceSpectrumUpdate: number = 0;
 
   private lastSpectrum: SpectralBandPowers = {
-    theta: 25,
-    alpha: 35,
-    beta: 40,
+    theta: 33.3,
+    alpha: 33.3,
+    beta: 33.4,
   };
-  private lastEstimatedConcentration: number = 60;
-  private lastEstimatedRelaxation: number = 60;
+  private lastEstimatedConcentration: number = 50;
+  private lastEstimatedRelaxation: number = 50;
 
   constructor(
     sampleRateHz: number = 250,
@@ -92,6 +98,7 @@ export class EEGSignalProcessor {
       amplitudeBorderUv?: number;
       stepJumpBorderUv?: number;
       updateRateHz?: number;
+      normalizeByBandwidth?: boolean;
     }
   ) {
     this.sampleRateHz = sampleRateHz;
@@ -100,6 +107,7 @@ export class EEGSignalProcessor {
     this.stepSamples = Math.max(1, Math.round(sampleRateHz / updateRate));
     this.amplitudeBorderUv = options?.amplitudeBorderUv ?? 110;
     this.stepJumpBorderUv = options?.stepJumpBorderUv ?? 75;
+    this.normalizeByBandwidth = options?.normalizeByBandwidth ?? true;
 
     this.notchLeft = new BiquadNotch50Hz(sampleRateHz, 50, 10);
     this.notchRight = new BiquadNotch50Hz(sampleRateHz, 50, 10);
@@ -194,17 +202,27 @@ export class EEGSignalProcessor {
 
   /**
    * Converts a raw 4-channel NeuroSDK2 sample into full EEGTelemetry when EmotionalMath DLL is absent.
+   * Supports explicit 'V' -> 'uV' scaling since NeuroSDK2 SignalData reports Volts.
    */
   public toTelemetryFrame(params: {
     timestamp: number;
     rawChannels: RawEEGChannels;
+    unit?: 'uV' | 'V';
     signalQuality: ElectrodeSignalQuality;
     resistanceKOhm?: ChannelResistanceKOhm;
   }): EEGTelemetry {
-    const snap = this.processSample(params.rawChannels, params.signalQuality);
+    const scale = params.unit === 'V' ? 1_000_000 : 1;
+    const scaledChannels: RawEEGChannels = {
+      t3: Number((params.rawChannels.t3 * scale).toFixed(2)),
+      t4: Number((params.rawChannels.t4 * scale).toFixed(2)),
+      o1: Number((params.rawChannels.o1 * scale).toFixed(2)),
+      o2: Number((params.rawChannels.o2 * scale).toFixed(2)),
+    };
+
+    const snap = this.processSample(scaledChannels, params.signalQuality);
     return {
       timestamp: params.timestamp,
-      rawChannels: { ...params.rawChannels },
+      rawChannels: scaledChannels,
       concentration: snap.estimatedConcentration,
       relaxation: snap.estimatedRelaxation,
       signalQuality: { ...params.signalQuality },
@@ -255,12 +273,12 @@ export class EEGSignalProcessor {
       beta: betaPct,
     };
 
-    // Engagement index: beta / (alpha + theta), mapped smoothly into [0, 100]
+    // Unbiased ratios: flat broadband PSD (theta == alpha == beta) maps to 50% Concentration & 50% Relaxation
     const engagementRatio = betaPower / (alphaPower + thetaPower + 1e-6);
     const calmRatio = alphaPower / (betaPower + 0.6 * thetaPower + 1e-6);
 
-    const conc = 100 * (engagementRatio / (engagementRatio + 0.75));
-    const relax = 100 * (calmRatio / (calmRatio + 0.75));
+    const conc = 100 * (engagementRatio / (engagementRatio + 0.5));
+    const relax = 100 * (calmRatio / (calmRatio + 0.625));
 
     this.lastEstimatedConcentration = Number(Math.max(0, Math.min(100, conc)).toFixed(2));
     this.lastEstimatedRelaxation = Number(Math.max(0, Math.min(100, relax)).toFixed(2));
@@ -300,6 +318,12 @@ export class EEGSignalProcessor {
       } else {
         beta += p;
       }
+    }
+
+    if (this.normalizeByBandwidth) {
+      theta /= THETA_BINS_COUNT;
+      alpha /= ALPHA_BINS_COUNT;
+      beta /= BETA_BINS_COUNT;
     }
 
     return { theta, alpha, beta };
