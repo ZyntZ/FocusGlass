@@ -5,45 +5,57 @@ import {
   X,
   Minus,
   Pin,
-  Activity,
-  Sliders,
-  BarChart3,
 } from 'lucide-react';
 import { useFocusStore } from './stores/useFocusStore';
-import { GlassPanel } from './components/glass/GlassPanel';
 import { GlassButton } from './components/glass/GlassButton';
-import { GlassBadge } from './components/glass/GlassBadge';
 import { BentoMetricGrid } from './components/dashboard/BentoMetricGrid';
 import { SessionAnalyticsView } from './components/dashboard/SessionAnalyticsView';
 import { FocusBarHUD } from './components/hud/FocusBarHUD';
 import { BiofeedbackOverlay } from './components/overlay/BiofeedbackOverlay';
-import { SettingsModal } from './components/settings/SettingsModal';
+import {
+  SettingsModal,
+  CalibrationSection,
+  ShortcutsSection,
+} from './components/settings/SettingsModal';
+import { BiofeedbackConfig } from './components/settings/BiofeedbackConfig';
+import { DeviceSelector } from './components/settings/DeviceSelector';
 import { tauriBridge } from './services/tauriBridge';
-
 import neurotechLogo from './assets/neurotech-logo.png';
-import brainbitIcon from './assets/brainbit-icon.png';
+
+const TABS = [
+  { id: 'monitor' as const, label: 'Мониторинг' },
+  { id: 'analytics' as const, label: 'Журнал сеансов' },
+  { id: 'calibration' as const, label: 'Калибровка и БОС' },
+  { id: 'settings' as const, label: 'Источник' },
+];
 
 export const App: React.FC = () => {
-  const {
-    viewMode,
-    setViewMode,
-    isClickThrough,
-    toggleClickThrough,
-    isAlwaysOnTop,
-    toggleAlwaysOnTop,
-    setIsSettingsOpen,
-    activeTab,
-    setActiveTab,
-    settings,
-    deviceStatus,
-    csvReplay,
-    telemetry,
-    isPaused,
-  } = useFocusStore();
+  const viewMode = useFocusStore((s) => s.viewMode);
+  const setViewMode = useFocusStore((s) => s.setViewMode);
+  const isClickThrough = useFocusStore((s) => s.isClickThrough);
+  const toggleClickThrough = useFocusStore((s) => s.toggleClickThrough);
+  const isAlwaysOnTop = useFocusStore((s) => s.isAlwaysOnTop);
+  const toggleAlwaysOnTop = useFocusStore((s) => s.toggleAlwaysOnTop);
+  const activeTab = useFocusStore((s) => s.activeTab);
+  const setActiveTab = useFocusStore((s) => s.setActiveTab);
+  const settings = useFocusStore((s) => s.settings);
+  const updateSettings = useFocusStore((s) => s.updateSettings);
+  const deviceStatus = useFocusStore((s) => s.deviceStatus);
+  const csvReplayActive = useFocusStore((s) => s.csvReplay.active);
+  const sessionHistoryCount = useFocusStore((s) => s.sessionHistory.length);
+  const isPaused = useFocusStore((s) => s.isPaused);
+  const activeSensorsCount = useFocusStore((s) => {
+    const active = s.settings.deviceSource === 'simulator' || s.deviceStatus.connected;
+    if (!active) return 0;
+    const q = s.telemetry?.signalQuality;
+    if (!q) return 4;
+    return [q.t3, q.t4, q.o1, q.o2].filter(Boolean).length;
+  });
 
-  // Синхронизация событий от глобального хоткея Ctrl+Shift+G и системного трея Windows
+  const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+
   React.useEffect(() => {
-    if (!('__TAURI_INTERNALS__' in window)) return;
+    if (!isTauri) return;
     const unlisteners: Array<() => void> = [];
     let cancelled = false;
 
@@ -70,244 +82,200 @@ export const App: React.FC = () => {
       cancelled = true;
       unlisteners.forEach((fn) => fn());
     };
-  }, []);
+  }, [isTauri]);
 
   const isSimulator = settings.deviceSource === 'simulator';
   const isBleConnected = !isSimulator && deviceStatus.connected;
+  const isStreamActive = isSimulator || isBleConnected;
 
-  const quality = telemetry?.signalQuality ?? { t3: true, t4: true, o1: true, o2: true };
-  const activeSensorsCount = isSimulator || isBleConnected
-    ? [quality.t3, quality.t4, quality.o1, quality.o2].filter(Boolean).length
-    : 0;
+  const currentTab =
+    activeTab === 'analytics' || activeTab === 'calibration' || activeTab === 'settings'
+      ? activeTab
+      : 'monitor';
+
+  if (viewMode === 'hud') {
+    return (
+      <div
+        className={`min-h-screen w-full relative font-sans ${
+          isTauri ? 'bg-transparent' : 'bg-[#f5f7fa]'
+        }`}
+      >
+        <BiofeedbackOverlay />
+        <FocusBarHUD />
+        <SettingsModal />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen w-full relative flex flex-col font-sans overflow-x-hidden">
-      {/* Background Ambient Biofeedback Screen Overlay */}
-      <BiofeedbackOverlay />
-
-      {/* Floating HUD View (Minimalist "Шкала-столбик" Over Active Desktop) */}
-      {viewMode === 'hud' ? (
-        <FocusBarHUD />
-      ) : (
-        /* Full Dashboard View */
-        <div className="relative z-10 flex flex-col flex-1 max-w-7xl mx-auto w-full p-4 md:p-6 space-y-4">
-          {/* Top Liquid Glass App Bar */}
-          <GlassPanel
-            variant="primary"
-            className="px-5 py-3.5 flex items-center justify-between shadow-xl border-white/20"
-            data-tauri-drag-region
-          >
-            {/* Left: Branding & Logos */}
-            <div className="flex items-center gap-4" data-tauri-drag-region>
-              <div className="flex items-center gap-2.5">
-                <img
-                  src={brainbitIcon}
-                  alt="BrainBit"
-                  className="w-8 h-8 rounded-xl object-contain shadow-md"
-                />
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h1 className="text-base font-extrabold tracking-tight text-white">
-                      FocusGlass
-                    </h1>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-[#FF6600] font-mono font-semibold">
-                      v0.2-MVP
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-[10px] text-slate-400">
-                    <span>BrainBit Biofeedback</span>
-                    <span>•</span>
-                    <span className="text-slate-300 font-medium">ООО НМФ «Нейротех»</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Partner Neurotech Logo */}
-              <div className="hidden sm:flex items-center pl-4 border-l border-white/10">
-                <img
-                  src={neurotechLogo}
-                  alt="Нейротех"
-                  className="h-5 object-contain opacity-80 hover:opacity-100 transition-opacity"
-                />
-              </div>
-            </div>
-
-            {/* Center: Device Badge */}
-            <div className="hidden md:flex items-center gap-2">
-              {isSimulator ? (
-                csvReplay.active ? (
-                  <GlassBadge variant="cyan" pulse={!isPaused}>
-                    CSV Replay · 250 Hz
-                  </GlassBadge>
-                ) : (
-                  <GlassBadge variant="orange" pulse={!isPaused}>
-                    Simulator · 250 Hz
-                  </GlassBadge>
-                )
-              ) : isBleConnected ? (
-                <GlassBadge variant="cyan" pulse={true}>
-                  BrainBit BLE · Connected
-                </GlassBadge>
-              ) : (
-                <GlassBadge variant="red" pulse={false}>
-                  BrainBit BLE · Disconnected
-                </GlassBadge>
-              )}
-
-              <GlassBadge variant="neutral">
-                {settings.mode === 'concentration'
-                  ? 'Focus Training (Beta)'
-                  : 'Calm Training (Alpha)'}
-              </GlassBadge>
-            </div>
-
-            {/* Right: Window & Mode Controls */}
-            <div className="flex items-center gap-2">
-              {/* Switch to Minimal HUD */}
-              <GlassButton
-                size="sm"
-                variant="primary"
-                onClick={() => setViewMode('hud')}
-                icon={<Minimize2 className="w-3.5 h-3.5" />}
-                title="Switch to Floating Screen Overlay HUD"
-              >
-                Floating HUD
-              </GlassButton>
-
-              {/* Click-Through Toggle */}
-              <GlassButton
-                size="sm"
-                variant={isClickThrough ? 'cyan' : 'secondary'}
-                onClick={() => toggleClickThrough()}
-                icon={<MousePointerClick className="w-3.5 h-3.5" />}
-                title="Toggle Click-Through Mode (Ctrl+Shift+G to restore)"
-              >
-                {isClickThrough ? 'Click-Thru' : 'Interactive'}
-              </GlassButton>
-
-              {/* Pin Window Always On Top */}
-              <button
-                onClick={() => toggleAlwaysOnTop()}
-                className={`p-2 rounded-xl border transition-all cursor-pointer ${
-                  isAlwaysOnTop
-                    ? 'bg-[#00D2FF]/20 text-[#00D2FF] border-[#00D2FF]/40 shadow-sm'
-                    : 'bg-white/5 text-slate-400 border-white/10 hover:text-white hover:bg-white/10'
-                }`}
-                title="Toggle Always on Top"
-              >
-                <Pin className="w-3.5 h-3.5" />
-              </button>
-
-              {/* Settings Trigger */}
-              <button
-                onClick={() => setIsSettingsOpen(true)}
-                className="p-2 rounded-xl bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white border border-white/10 transition-colors cursor-pointer"
-                title="Open Settings"
-              >
-                <Sliders className="w-3.5 h-3.5" />
-              </button>
-
-              {/* Window Minimize & Close for Tauri */}
-              <div className="hidden sm:flex items-center pl-2 ml-1 border-l border-white/10 gap-1">
-                <button
-                  onClick={() => tauriBridge.minimizeWindow()}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 cursor-pointer"
-                  title="Minimize"
-                >
-                  <Minus className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => tauriBridge.closeWindow()}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 cursor-pointer"
-                  title="Close"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          </GlassPanel>
-
-          {/* Main Dashboard View Switcher */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-slate-950/50 border border-white/10 backdrop-blur-md">
-              <button
-                onClick={() => setActiveTab('monitor')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  activeTab !== 'analytics'
-                    ? 'bg-[#FF6600]/25 text-white border border-[#FF6600]/50 shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Activity className="w-3.5 h-3.5 text-[#FF6600]" />
-                Live Monitor
-              </button>
-              <button
-                onClick={() => setActiveTab('analytics')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  activeTab === 'analytics'
-                    ? 'bg-[#00D2FF]/20 text-white border border-[#00D2FF]/45 shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <BarChart3 className="w-3.5 h-3.5 text-[#00D2FF]" />
-                Session Analytics
-              </button>
-            </div>
+    <div className="min-h-screen w-full flex flex-col bg-[#f5f7fa] text-[#111827] font-sans relative">
+      {/* Верхняя панель прибора */}
+      <header
+        className="relative z-10 h-11 px-4 bg-[#ffffff] border-b border-[rgba(17,24,39,0.12)] flex items-center justify-between gap-4 shrink-0"
+        data-tauri-drag-region
+      >
+        <div className="flex items-center gap-4 min-w-0 h-full">
+          <div className="flex items-center gap-2.5 shrink-0" data-tauri-drag-region>
+            <span className="text-sm font-semibold tracking-[-0.01em] text-[#111827]">
+              FocusGlass
+            </span>
+            <span className="h-3.5 w-px bg-[rgba(17,24,39,0.14)] hidden sm:inline-block" />
+            <img
+              src={neurotechLogo}
+              alt="НМФ Нейротех"
+              className="h-4 object-contain hidden sm:block"
+            />
           </div>
 
-          {/* Main Dashboard Content */}
-          <main className="flex-1">
-            {activeTab === 'analytics' ? <SessionAnalyticsView /> : <BentoMetricGrid />}
-          </main>
+          {/* Переключатель вкладок */}
+          <nav className="flex items-center h-full gap-1 overflow-x-auto ml-1">
+            {TABS.map((tab) => {
+              const active = currentTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`h-full px-2.5 text-xs border-b-2 transition-colors duration-120 cursor-pointer whitespace-nowrap inline-flex items-center gap-1.5 ${
+                    active
+                      ? 'border-[#1d5bbf] text-[#111827] font-medium'
+                      : 'border-transparent text-[#6b7487] hover:text-[#111827]'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  {tab.id === 'analytics' && sessionHistoryCount > 0 && (
+                    <span className="font-mono tabular-nums text-[11px] text-[#6b7487]">
+                      {sessionHistoryCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
 
-          {/* Bottom Status Ribbon */}
-          <footer className="py-2 px-4 rounded-xl bg-slate-950/40 border border-white/5 backdrop-blur-md flex flex-wrap items-center justify-between text-[11px] text-slate-400">
-            <div className="flex items-center gap-3">
-              {isSimulator ? (
-                <span className="flex items-center gap-1.5 text-amber-300 font-mono">
-                  <Activity className="w-3 h-3" />
-                  {isPaused
-                    ? 'Stream Paused'
-                    : csvReplay.active
-                    ? `250 Hz CSV Replay (${csvReplay.fileName})`
-                    : '250 Hz Synthetic Telemetry'}
-                </span>
-              ) : isBleConnected ? (
-                <span className="flex items-center gap-1.5 text-emerald-400 font-mono">
-                  <Activity className="w-3 h-3" />
-                  250 Hz BrainBit Stream
-                </span>
-              ) : (
-                <span className="flex items-center gap-1.5 text-rose-400 font-mono">
-                  <Activity className="w-3 h-3" />
-                  BLE Disconnected (NeuroSDK2 pending)
-                </span>
-              )}
-              <span>•</span>
-              <span className={activeSensorsCount === 4 ? 'text-slate-300' : 'text-amber-300'}>
-                Contact OK: {activeSensorsCount}/4 (T3, T4, O1, O2)
-              </span>
-            </div>
+        {/* Статус потока и управление режимом */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          <span className="hidden xl:inline-flex items-center gap-2 text-[11px] font-mono tabular-nums text-[#4b5565]">
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                !isStreamActive
+                  ? 'bg-[#dc2626]'
+                  : isPaused && isSimulator
+                  ? 'bg-[#6b7487]'
+                  : 'bg-[#15803d]'
+              }`}
+            />
+            {!isStreamActive
+              ? 'BLE откл.'
+              : csvReplayActive
+              ? 'CSV 250 Гц'
+              : isSimulator
+              ? 'Сим 250 Гц'
+              : 'BLE 250 Гц'}{' '}
+            · {activeSensorsCount}/4 электр.
+          </span>
 
-            <div className="flex items-center gap-3">
-              <span>
-                {isSimulator
-                  ? 'Keys 1-5: Demo Presets · Space: Pause'
-                  : 'Ctrl+Shift+G: Exit Click-Through'}
-              </span>
-              <span>•</span>
+          <div className="hidden md:inline-flex items-center rounded-[5px] border border-[rgba(17,24,39,0.14)] bg-[#f8f9fb] p-0.5">
+            <button
+              type="button"
+              onClick={() => updateSettings({ mode: 'concentration' })}
+              className={`px-2 h-6 rounded-[4px] text-xs transition-colors duration-120 cursor-pointer ${
+                settings.mode === 'concentration'
+                  ? 'bg-[#ffffff] text-[#111827] font-medium shadow-[0_1px_1px_rgba(0,0,0,0.06)]'
+                  : 'text-[#6b7487] hover:text-[#111827]'
+              }`}
+            >
+              β Фокус
+            </button>
+            <button
+              type="button"
+              onClick={() => updateSettings({ mode: 'relaxation' })}
+              className={`px-2 h-6 rounded-[4px] text-xs transition-colors duration-120 cursor-pointer ${
+                settings.mode === 'relaxation'
+                  ? 'bg-[#ffffff] text-[#111827] font-medium shadow-[0_1px_1px_rgba(0,0,0,0.06)]'
+                  : 'text-[#6b7487] hover:text-[#111827]'
+              }`}
+            >
+              α Покой
+            </button>
+          </div>
+
+          <GlassButton
+            size="sm"
+            variant="primary"
+            onClick={() => setViewMode('hud')}
+            icon={<Minimize2 size={13} strokeWidth={1.5} />}
+          >
+            Оверлей HUD
+          </GlassButton>
+
+          {isTauri && (
+            <div className="flex items-center gap-1 pl-2 border-l border-[rgba(17,24,39,0.12)]">
               <button
-                onClick={() => setIsSettingsOpen(true)}
-                className="text-[#FF6600] hover:underline cursor-pointer"
+                type="button"
+                onClick={() => toggleClickThrough()}
+                title="Сквозной клик (Ctrl+Shift+G)"
+                className={`w-7 h-7 rounded inline-flex items-center justify-center cursor-pointer ${
+                  isClickThrough
+                    ? 'bg-[#1d5bbf] text-white'
+                    : 'text-[#6b7487] hover:text-[#111827] hover:bg-[#eceff4]'
+                }`}
               >
-                Configure Biofeedback (БОС)
+                <MousePointerClick size={14} strokeWidth={1.5} />
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleAlwaysOnTop()}
+                title="Поверх всех окон"
+                className={`w-7 h-7 rounded inline-flex items-center justify-center cursor-pointer ${
+                  isAlwaysOnTop
+                    ? 'bg-[#eceff4] text-[#1d5bbf]'
+                    : 'text-[#6b7487] hover:text-[#111827] hover:bg-[#eceff4]'
+                }`}
+              >
+                <Pin size={14} strokeWidth={1.5} />
+              </button>
+              <button
+                type="button"
+                onClick={() => tauriBridge.minimizeWindow()}
+                title="Свернуть"
+                className="w-7 h-7 rounded inline-flex items-center justify-center text-[#6b7487] hover:text-[#111827] hover:bg-[#eceff4] cursor-pointer"
+              >
+                <Minus size={14} strokeWidth={1.5} />
+              </button>
+              <button
+                type="button"
+                onClick={() => tauriBridge.closeWindow()}
+                title="Закрыть"
+                className="w-7 h-7 rounded inline-flex items-center justify-center text-[#6b7487] hover:text-[#dc2626] hover:bg-[#fef2f2] cursor-pointer"
+              >
+                <X size={14} strokeWidth={1.5} />
               </button>
             </div>
-          </footer>
+          )}
         </div>
-      )}
+      </header>
 
-      {/* Settings Modal */}
+      {/* Рабочая область */}
+      <main className="relative z-10 flex-1 flex flex-col min-h-0">
+        {currentTab === 'monitor' ? (
+          <BentoMetricGrid />
+        ) : currentTab === 'analytics' ? (
+          <SessionAnalyticsView />
+        ) : currentTab === 'calibration' ? (
+          <div className="p-5 max-w-3xl w-full mx-auto space-y-4">
+            <CalibrationSection />
+            <BiofeedbackConfig />
+          </div>
+        ) : (
+          <div className="p-5 max-w-3xl w-full mx-auto space-y-4">
+            <DeviceSelector />
+            <ShortcutsSection />
+          </div>
+        )}
+      </main>
+
       <SettingsModal />
     </div>
   );

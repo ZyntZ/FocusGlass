@@ -1,17 +1,6 @@
 import React from 'react';
-import {
-  TrendingUp,
-  History,
-  Download,
-  RotateCcw,
-  Trash2,
-  Flame,
-  Clock,
-  Activity,
-} from 'lucide-react';
+import { Download, RotateCcw, Trash2 } from 'lucide-react';
 import { useFocusStore } from '../../stores/useFocusStore';
-import { GlassPanel } from '../glass/GlassPanel';
-import { GlassBadge } from '../glass/GlassBadge';
 import { GlassButton } from '../glass/GlassButton';
 
 function formatDuration(totalSeconds: number): string {
@@ -23,9 +12,10 @@ function formatDuration(totalSeconds: number): string {
 function formatDateTime(iso: string): string {
   try {
     const d = new Date(iso);
-    return d.toLocaleString(undefined, {
-      month: 'short',
+    return d.toLocaleString('ru-RU', {
       day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
     });
@@ -35,26 +25,24 @@ function formatDateTime(iso: string): string {
 }
 
 export const SessionAnalyticsView: React.FC = () => {
-  const {
-    sessionTimeline,
-    sessionStats,
-    sessionHistory,
-    settings,
-    resetSession,
-    clearSessionHistory,
-    exportSessionsCsv,
-  } = useFocusStore();
+  const sessionTimeline = useFocusStore((s) => s.sessionTimeline);
+  const durationWholeSec = useFocusStore((s) => Math.floor(s.sessionStats.durationSeconds));
+  const sessionHistory = useFocusStore((s) => s.sessionHistory);
+  const threshold = useFocusStore((s) => s.settings.threshold);
+  const resetSession = useFocusStore((s) => s.resetSession);
+  const clearSessionHistory = useFocusStore((s) => s.clearSessionHistory);
+  const exportSessionsCsv = useFocusStore((s) => s.exportSessionsCsv);
 
-  const width = 820;
-  const height = 230;
-  const padLeft = 38;
+  const width = 920;
+  const height = 240;
+  const padLeft = 42;
   const padRight = 16;
-  const padTop = 16;
+  const padTop = 14;
   const padBottom = 26;
   const innerW = width - padLeft - padRight;
   const innerH = height - padTop - padBottom;
 
-  const points = sessionTimeline.slice(-180); // Last 3 minutes window for sharp resolution
+  const points = sessionTimeline.slice(-180);
   const n = points.length;
 
   const toX = (i: number) => (n <= 1 ? padLeft : padLeft + (i / (n - 1)) * innerW);
@@ -82,7 +70,7 @@ export const SessionAnalyticsView: React.FC = () => {
           .join(' ')
       : '';
 
-  const thresholdY = toY(settings.threshold);
+  const thresholdY = toY(threshold);
 
   const totalSavedDuration = sessionHistory.reduce((acc, s) => acc + s.durationSeconds, 0);
   const totalSavedFocus = sessionHistory.reduce((acc, s) => acc + s.timeInFocusSeconds, 0);
@@ -95,87 +83,91 @@ export const SessionAnalyticsView: React.FC = () => {
         )
       : null;
 
-  const canExport = sessionStats.durationSeconds >= 1 || sessionHistory.length > 0;
+  const canExport = durationWholeSec >= 1 || sessionHistory.length > 0;
 
   return (
-    <div className="space-y-4">
-      {/* Summary KPI Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <GlassPanel variant="card" className="p-4 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-slate-400 block">Completed Sessions</span>
-            <span className="text-2xl font-black font-mono text-white mt-0.5 block">
+    <div className="flex flex-col flex-1 bg-[#ffffff]">
+      {/* Сводка по наработке */}
+      <div className="border-b border-[rgba(17,24,39,0.10)] bg-[#ffffff] px-4 py-2 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center divide-x divide-[rgba(17,24,39,0.10)] text-xs">
+          <div className="pr-4 flex items-baseline gap-2">
+            <span className="text-[#6b7487]">Завершено сеансов</span>
+            <span className="text-sm font-medium font-mono tabular-nums text-[#111827]">
               {sessionHistory.length}
             </span>
           </div>
-          <div className="p-2.5 rounded-xl bg-orange-500/15 text-[#FF6600]">
-            <History className="w-5 h-5" />
-          </div>
-        </GlassPanel>
-
-        <GlassPanel variant="card" className="p-4 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-slate-400 block">Cumulative Training Time</span>
-            <span className="text-2xl font-black font-mono text-white mt-0.5 block">
-              {formatDuration(totalSavedDuration + sessionStats.durationSeconds)}
+          <div className="px-4 flex items-baseline gap-2">
+            <span className="text-[#6b7487]">Суммарная наработка</span>
+            <span className="text-sm font-medium font-mono tabular-nums text-[#111827]">
+              {formatDuration(totalSavedDuration + durationWholeSec)}
             </span>
           </div>
-          <div className="p-2.5 rounded-xl bg-cyan-500/15 text-[#00D2FF]">
-            <Clock className="w-5 h-5" />
-          </div>
-        </GlassPanel>
-
-        <GlassPanel variant="card" className="p-4 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-slate-400 block">Mean Historical Score / Flow</span>
-            <span className="text-2xl font-black font-mono text-emerald-400 mt-0.5 block">
-              {overallAvgScore !== null ? `${overallAvgScore}% · ${overallFlowPct}%` : '—'}
+          <div className="pl-4 flex items-baseline gap-2">
+            <span className="text-[#6b7487]">Средний индекс / в зоне</span>
+            <span className="text-sm font-medium font-mono tabular-nums text-[#111827]">
+              {overallAvgScore !== null ? `${overallAvgScore}% / ${overallFlowPct}%` : '—'}
             </span>
-          </div>
-          <div className="p-2.5 rounded-xl bg-emerald-500/15 text-emerald-400">
-            <Flame className="w-5 h-5" />
-          </div>
-        </GlassPanel>
-      </div>
-
-      {/* Live Session Trend Chart */}
-      <GlassPanel variant="card" className="p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-white/10">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-cyan-500/20 text-[#00D2FF]">
-              <TrendingUp className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-white">
-                Current Session Dynamics (Last 3 min · 1 Hz)
-              </h3>
-              <p className="text-xs text-slate-400">
-                Active metric curve, raw Focus/Calm indices, and dimming intervals below threshold
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 text-[11px]">
-            <span className="flex items-center gap-1.5 text-slate-300">
-              <span className="w-2.5 h-0.5 bg-[#00D2FF] inline-block" /> Smoothed БОС
-            </span>
-            <span className="flex items-center gap-1.5 text-slate-300">
-              <span className="w-2.5 h-0.5 bg-[#FF6600] inline-block" /> Focus (β)
-            </span>
-            <span className="flex items-center gap-1.5 text-slate-300">
-              <span className="w-2.5 h-0.5 bg-[#A78BFA] inline-block" /> Calm (α)
-            </span>
-            <GlassBadge variant="neutral">Cutoff {settings.threshold}%</GlassBadge>
           </div>
         </div>
 
-        <div className="relative w-full bg-slate-950/70 rounded-xl border border-white/10 p-2 overflow-hidden">
+        <div className="flex items-center gap-2">
+          <GlassButton
+            size="sm"
+            variant="secondary"
+            disabled={durationWholeSec < 3}
+            onClick={() => resetSession(true)}
+            icon={<RotateCcw size={13} strokeWidth={1.5} />}
+          >
+            Завершить текущий
+          </GlassButton>
+          <GlassButton
+            size="sm"
+            variant="primary"
+            disabled={!canExport}
+            onClick={() => exportSessionsCsv()}
+            icon={<Download size={13} strokeWidth={1.5} />}
+          >
+            Экспорт CSV
+          </GlassButton>
+          {sessionHistory.length > 0 && (
+            <GlassButton
+              size="sm"
+              variant="ghost"
+              onClick={() => clearSessionHistory()}
+              icon={<Trash2 size={13} strokeWidth={1.5} />}
+            >
+              Очистить
+            </GlassButton>
+          )}
+        </div>
+      </div>
+
+      {/* График динамики текущего сеанса (1 Гц) */}
+      <div className="border-b border-[rgba(17,24,39,0.10)]">
+        <div className="h-9 px-4 border-b border-[rgba(17,24,39,0.10)] bg-[#f8f9fb] flex flex-wrap items-center justify-between gap-3 text-xs">
+          <span className="font-medium text-[#111827]">Тренд текущего сеанса (шаг 1 с, окно 3 мин)</span>
+          <div className="flex items-center gap-4 text-[11px] text-[#4b5565]">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-3 h-[2px] bg-[#1d5bbf] inline-block" /> Сглаженный БОС
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-3 h-[1.5px] bg-[#334155] inline-block" /> β-индекс
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-3 h-[1.5px] bg-[#94a3b8] inline-block" /> α-индекс
+            </span>
+            <span className="font-mono tabular-nums text-[#6b7487]">
+              порог {threshold}%
+            </span>
+          </div>
+        </div>
+
+        <div className="relative w-full bg-[#ffffff] px-2 py-2">
           <svg
             viewBox={`0 0 ${width} ${height}`}
-            className="w-full h-[220px] block select-none"
+            className="w-full h-[230px] block select-none"
             preserveAspectRatio="none"
           >
-            {/* Horizontal grid lines */}
             {[0, 25, 50, 75, 100].map((tick) => {
               const y = toY(tick);
               return (
@@ -185,16 +177,16 @@ export const SessionAnalyticsView: React.FC = () => {
                     y1={y}
                     x2={width - padRight}
                     y2={y}
-                    stroke="rgba(255,255,255,0.06)"
+                    stroke="rgba(17,24,39,0.07)"
                     strokeWidth="1"
                   />
                   <text
-                    x={padLeft - 6}
-                    y={y + 3}
+                    x={padLeft - 8}
+                    y={y + 3.5}
                     textAnchor="end"
-                    fill="rgba(148,163,184,0.8)"
+                    fill="#6b7487"
                     fontSize="10"
-                    fontFamily="monospace"
+                    fontFamily="IBM Plex Mono, monospace"
                   >
                     {tick}%
                   </text>
@@ -202,7 +194,6 @@ export const SessionAnalyticsView: React.FC = () => {
               );
             })}
 
-            {/* Shaded dimming spans */}
             {n >= 2 &&
               points.map((pt, idx) => {
                 if (!pt.isDimmingActive || idx === n - 1) return null;
@@ -215,53 +206,50 @@ export const SessionAnalyticsView: React.FC = () => {
                     y={padTop}
                     width={Math.max(1, x2 - x1)}
                     height={innerH}
-                    fill="rgba(255, 102, 0, 0.10)"
+                    fill="rgba(220, 38, 38, 0.06)"
                   />
                 );
               })}
 
-            {/* Target threshold dashed line */}
             <line
               x1={padLeft}
               y1={thresholdY}
               x2={width - padRight}
               y2={thresholdY}
-              stroke="rgba(255, 255, 255, 0.45)"
-              strokeWidth="1.2"
-              strokeDasharray="5 4"
+              stroke="#6b7487"
+              strokeWidth="1"
+              strokeDasharray="4 3"
             />
 
-            {/* Curves */}
             {n >= 2 && (
               <>
                 <path
                   d={focusPath}
                   fill="none"
-                  stroke="#FF6600"
-                  strokeOpacity="0.55"
-                  strokeWidth="1.5"
+                  stroke="#334155"
+                  strokeOpacity="0.45"
+                  strokeWidth="1.1"
                 />
                 <path
                   d={calmPath}
                   fill="none"
-                  stroke="#A78BFA"
-                  strokeOpacity="0.55"
-                  strokeWidth="1.5"
+                  stroke="#94a3b8"
+                  strokeOpacity="0.6"
+                  strokeWidth="1.1"
                 />
-                <path d={smoothedPath} fill="none" stroke="#00D2FF" strokeWidth="2.4" />
+                <path d={smoothedPath} fill="none" stroke="#1d5bbf" strokeWidth="1.75" />
               </>
             )}
 
-            {/* X-axis timestamps */}
             {n >= 2 && (
               <>
                 <text
                   x={padLeft}
                   y={height - 6}
                   textAnchor="start"
-                  fill="rgba(148,163,184,0.8)"
+                  fill="#6b7487"
                   fontSize="10"
-                  fontFamily="monospace"
+                  fontFamily="IBM Plex Mono, monospace"
                 >
                   {formatDuration(points[0].elapsedSeconds)}
                 </text>
@@ -269,9 +257,9 @@ export const SessionAnalyticsView: React.FC = () => {
                   x={width - padRight}
                   y={height - 6}
                   textAnchor="end"
-                  fill="rgba(148,163,184,0.8)"
+                  fill="#6b7487"
                   fontSize="10"
-                  fontFamily="monospace"
+                  fontFamily="IBM Plex Mono, monospace"
                 >
                   {formatDuration(points[n - 1].elapsedSeconds)}
                 </text>
@@ -281,109 +269,72 @@ export const SessionAnalyticsView: React.FC = () => {
 
           {n < 2 && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <span className="px-3 py-1.5 rounded-lg bg-slate-950/85 border border-white/10 text-xs font-mono text-slate-400 flex items-center gap-2">
-                <Activity className="w-3.5 h-3.5 text-[#00D2FF]" />
-                Collecting 1 Hz session points ({n}/2s)...
+              <span className="text-xs font-mono text-[#6b7487]">
+                Накопление отсчётов ({n}/2 с)
               </span>
             </div>
           )}
         </div>
-      </GlassPanel>
+      </div>
 
-      {/* Saved Session History Log */}
-      <GlassPanel variant="card" className="p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-white/10">
-          <div>
-            <h3 className="text-sm font-bold text-white">Local Training History</h3>
-            <p className="text-xs text-slate-400">
-              Persisted locally (AppData sessions.json in Tauri desktop / localStorage in web mode)
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <GlassButton
-              size="sm"
-              variant="secondary"
-              disabled={sessionStats.durationSeconds < 3}
-              onClick={() => resetSession(true)}
-              icon={<RotateCcw className="w-3.5 h-3.5" />}
-            >
-              Finish & Save Current
-            </GlassButton>
-            <GlassButton
-              size="sm"
-              variant="primary"
-              disabled={!canExport}
-              onClick={() => exportSessionsCsv()}
-              icon={<Download className="w-3.5 h-3.5" />}
-            >
-              Export CSV
-            </GlassButton>
-            {sessionHistory.length > 0 && (
-              <button
-                onClick={() => clearSessionHistory()}
-                title="Clear saved session history"
-                className="p-2 rounded-xl bg-white/5 hover:bg-rose-500/15 text-slate-400 hover:text-rose-400 border border-white/10 transition-colors cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
+      {/* Таблица сохранённых сеансов */}
+      <div className="flex-1">
+        <div className="h-9 px-4 border-b border-[rgba(17,24,39,0.10)] bg-[#f8f9fb] flex items-center justify-between text-xs">
+          <span className="font-medium text-[#111827]">Архив завершённых сеансов</span>
+          <span className="text-[#6b7487] font-mono">sessions.json / localStorage</span>
         </div>
 
         {sessionHistory.length === 0 ? (
-          <div className="py-8 text-center text-xs text-slate-400">
-            No completed sessions saved yet. Run a session for at least 3 seconds and click{' '}
-            <strong className="text-slate-200">Finish &amp; Save Current</strong> (or reset button
-            on the Live Monitor card).
+          <div className="py-10 px-4 text-center text-xs text-[#6b7487]">
+            Записей нет. Для сохранения сеанса нажмите «Завершить текущий» после 3 с работы
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-white/10 text-slate-400 font-medium">
-                  <th className="py-2 pr-3">Ended</th>
-                  <th className="py-2 px-3">Mode</th>
-                  <th className="py-2 px-3">Source</th>
-                  <th className="py-2 px-3 font-mono">Duration</th>
-                  <th className="py-2 px-3 font-mono">In Flow</th>
-                  <th className="py-2 px-3 font-mono">Avg / Cutoff</th>
-                  <th className="py-2 px-3 font-mono">Dips</th>
-                  <th className="py-2 pl-3 font-mono">Artifacts</th>
+                <tr className="border-b border-[rgba(17,24,39,0.10)] bg-[#fcfcfd] text-[#6b7487]">
+                  <th className="py-2 px-4 font-normal">Дата и время</th>
+                  <th className="py-2 px-3 font-normal">Режим</th>
+                  <th className="py-2 px-3 font-normal">Источник</th>
+                  <th className="py-2 px-3 font-normal text-right">Длительность</th>
+                  <th className="py-2 px-3 font-normal text-right">Доля в зоне</th>
+                  <th className="py-2 px-3 font-normal text-right">Средний / порог</th>
+                  <th className="py-2 px-3 font-normal text-right">Спады</th>
+                  <th className="py-2 px-4 font-normal text-right">Артефакты</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className="divide-y divide-[rgba(17,24,39,0.08)]">
                 {sessionHistory.map((rec) => {
                   const flowPct =
                     rec.durationSeconds > 0
                       ? Math.round((rec.timeInFocusSeconds / rec.durationSeconds) * 100)
                       : 0;
                   return (
-                    <tr key={rec.id} className="hover:bg-white/5 transition-colors">
-                      <td className="py-2.5 pr-3 text-slate-300 whitespace-nowrap">
+                    <tr key={rec.id} className="hover:bg-[#f8f9fb]">
+                      <td className="py-2 px-4 font-mono tabular-nums text-[#4b5565] whitespace-nowrap">
                         {formatDateTime(rec.endedAt)}
                       </td>
-                      <td className="py-2.5 px-3">
-                        <GlassBadge
-                          variant={rec.mode === 'concentration' ? 'orange' : 'violet'}
-                        >
-                          {rec.mode === 'concentration' ? 'Focus (β)' : 'Calm (α)'}
-                        </GlassBadge>
+                      <td className="py-2 px-3 text-[#111827]">
+                        {rec.mode === 'concentration' ? 'Концентрация β' : 'Релаксация α'}
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-slate-400 uppercase">
-                        {rec.deviceSource === 'simulator' ? 'SIM' : 'BLE'}
+                      <td className="py-2 px-3 text-[#4b5565]">
+                        {rec.deviceSource === 'simulator' ? 'Симулятор' : 'BrainBit BLE'}
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-white">
+                      <td className="py-2 px-3 font-mono tabular-nums text-[#111827] text-right">
                         {formatDuration(rec.durationSeconds)}
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-emerald-400">{flowPct}%</td>
-                      <td className="py-2.5 px-3 font-mono text-cyan-300">
+                      <td className="py-2 px-3 font-mono tabular-nums text-[#111827] text-right">
+                        {flowPct}%
+                      </td>
+                      <td className="py-2 px-3 font-mono tabular-nums text-[#4b5565] text-right">
                         {Math.round(rec.averageFocusScore)}% / {rec.threshold}%
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-[#FF6600]">
+                      <td className="py-2 px-3 font-mono tabular-nums text-[#111827] text-right">
                         {rec.distractionEventsCount}
                       </td>
-                      <td className="py-2.5 pl-3 font-mono text-slate-400">{rec.artifactCount}</td>
+                      <td className="py-2 px-4 font-mono tabular-nums text-[#6b7487] text-right">
+                        {rec.artifactCount}
+                      </td>
                     </tr>
                   );
                 })}
@@ -391,7 +342,7 @@ export const SessionAnalyticsView: React.FC = () => {
             </table>
           </div>
         )}
-      </GlassPanel>
+      </div>
     </div>
   );
 };

@@ -1,177 +1,242 @@
 import React from 'react';
-import { ShieldCheck, ShieldAlert, CheckCircle2, XCircle } from 'lucide-react';
 import { useFocusStore } from '../../stores/useFocusStore';
-import { GlassPanel } from '../glass/GlassPanel';
-import { GlassBadge } from '../glass/GlassBadge';
-import electrodeDiagramImg from '../../assets/electrode-diagram.webp';
-import headbandHeroImg from '../../assets/headband-hero.webp';
 
 export const ElectrodeCard: React.FC = () => {
-  const { telemetry, settings, deviceStatus, setElectrodeContact } = useFocusStore();
+  const deviceSource = useFocusStore((s) => s.settings.deviceSource);
+  const connected = useFocusStore((s) => s.deviceStatus.connected);
+  const setElectrodeContact = useFocusStore((s) => s.setElectrodeContact);
+  const qt3 = useFocusStore((s) => s.telemetry?.signalQuality.t3 ?? true);
+  const qt4 = useFocusStore((s) => s.telemetry?.signalQuality.t4 ?? true);
+  const qo1 = useFocusStore((s) => s.telemetry?.signalQuality.o1 ?? true);
+  const qo2 = useFocusStore((s) => s.telemetry?.signalQuality.o2 ?? true);
+  const rt3 = useFocusStore((s) =>
+    s.telemetry?.resistanceKOhm?.t3 != null ? Math.round(s.telemetry.resistanceKOhm.t3) : 134
+  );
+  const rt4 = useFocusStore((s) =>
+    s.telemetry?.resistanceKOhm?.t4 != null ? Math.round(s.telemetry.resistanceKOhm.t4) : 128
+  );
+  const ro1 = useFocusStore((s) =>
+    s.telemetry?.resistanceKOhm?.o1 != null ? Math.round(s.telemetry.resistanceKOhm.o1) : 115
+  );
+  const ro2 = useFocusStore((s) =>
+    s.telemetry?.resistanceKOhm?.o2 != null ? Math.round(s.telemetry.resistanceKOhm.o2) : 121
+  );
 
-  const isSimulator = settings.deviceSource === 'simulator';
-  const isStreamActive = isSimulator || deviceStatus.connected;
+  const isSimulator = deviceSource === 'simulator';
+  const isStreamActive = isSimulator || connected;
 
   const quality = isStreamActive
-    ? telemetry?.signalQuality ?? { t3: true, t4: true, o1: true, o2: true }
+    ? { t3: qt3, t4: qt4, o1: qo1, o2: qo2 }
     : { t3: false, t4: false, o1: false, o2: false };
 
-  const resistance = telemetry?.resistanceKOhm;
+  const resistance = { t3: rt3, t4: rt4, o1: ro1, o2: ro2 };
   const allGood = isStreamActive && quality.t3 && quality.t4 && quality.o1 && quality.o2;
 
   const formatResistance = (ch: 't3' | 't4' | 'o1' | 'o2', ok: boolean): string => {
-    if (!isStreamActive) return '— kΩ';
-    if (!ok) return '> 2500 kΩ';
-    const val = resistance?.[ch];
-    if (val === undefined || val === null) {
-      const defaults = { t3: 134, t4: 128, o1: 115, o2: 121 };
-      return `${defaults[ch]} kΩ`;
-    }
-    return `${Math.round(val)} kΩ`;
+    if (!isStreamActive) return '—';
+    if (!ok) return '> 2500 кОм';
+    return `${resistance[ch]} кОм`;
   };
 
   const electrodes = [
-    {
-      id: 't3' as const,
-      name: 'T3 — Left Temporal',
-      location: 'Left temporal (dry spring electrode)',
-      ok: quality.t3,
-      impedance: formatResistance('t3', quality.t3),
-    },
-    {
-      id: 't4' as const,
-      name: 'T4 — Right Temporal',
-      location: 'Right temporal (dry spring electrode)',
-      ok: quality.t4,
-      impedance: formatResistance('t4', quality.t4),
-    },
-    {
-      id: 'o1' as const,
-      name: 'O1 — Left Occipital',
-      location: 'Left occipital (visual / alpha)',
-      ok: quality.o1,
-      impedance: formatResistance('o1', quality.o1),
-    },
-    {
-      id: 'o2' as const,
-      name: 'O2 — Right Occipital',
-      location: 'Right occipital (visual / alpha)',
-      ok: quality.o2,
-      impedance: formatResistance('o2', quality.o2),
-    },
+    { id: 't3' as const, code: 'T3', zone: 'Левый височный', cx: 38, cy: 80, ok: quality.t3 },
+    { id: 't4' as const, code: 'T4', zone: 'Правый височный', cx: 142, cy: 80, ok: quality.t4 },
+    { id: 'o1' as const, code: 'O1', zone: 'Левый затылочный', cx: 68, cy: 126, ok: quality.o1 },
+    { id: 'o2' as const, code: 'O2', zone: 'Правый затылочный', cx: 112, cy: 126, ok: quality.o2 },
   ];
 
+  const handleToggle = (id: 't3' | 't4' | 'o1' | 'o2', currentOk: boolean) => {
+    if (isSimulator) {
+      setElectrodeContact(id, !currentOk);
+    }
+  };
+
   return (
-    <GlassPanel variant="card" className="p-4 flex flex-col justify-between">
-      <div>
-        <div className="flex items-center justify-between mb-3 pb-2 border-b border-white/10">
-          <div className="flex items-center gap-2">
-            <div
-              className={`p-1.5 rounded-lg ${
-                allGood ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
-              }`}
-            >
-              {allGood ? <ShieldCheck className="w-4 h-4" /> : <ShieldAlert className="w-4 h-4" />}
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-white">4-Channel Dry Electrode Contact</h3>
-              <p className="text-[11px] text-slate-400">
-                BrainBit 10-20 Montage · Norm &lt; 1000 kΩ
-              </p>
-            </div>
-          </div>
-          <GlassBadge variant={!isStreamActive ? 'neutral' : allGood ? 'green' : 'red'}>
-            {!isStreamActive
-              ? 'No Device'
+    <div className="border-b border-[rgba(17,24,39,0.10)]">
+      <div className="h-9 px-4 border-b border-[rgba(17,24,39,0.10)] bg-[#f8f9fb] flex items-center justify-between">
+        <span className="text-xs font-medium text-[#111827]">Импеданс 10–20</span>
+        <span
+          className={`text-[11px] font-mono tabular-nums ${
+            !isStreamActive
+              ? 'text-[#6b7487]'
               : allGood
-              ? 'Contact OK'
-              : 'Contact Lost (БОС Paused)'}
-          </GlassBadge>
-        </div>
-
-        {/* Diagram & Photo View */}
-        <div className="grid grid-cols-2 gap-3 mb-3">
-          <div className="relative rounded-xl overflow-hidden bg-slate-900/60 border border-white/10 p-2 flex flex-col items-center justify-center">
-            <img
-              src={electrodeDiagramImg}
-              alt="Electrode 10-20 Layout"
-              className="h-24 object-contain filter drop-shadow-md"
-            />
-            <span className="text-[10px] text-slate-400 mt-1 font-mono">10-20 International Map</span>
-          </div>
-
-          <div className="relative rounded-xl overflow-hidden bg-slate-900/60 border border-white/10 p-2 flex flex-col items-center justify-center">
-            <img
-              src={headbandHeroImg}
-              alt="BrainBit Headband"
-              className="h-24 object-contain filter drop-shadow-md"
-            />
-            <span className="text-[10px] text-slate-400 mt-1 font-mono">BrainBit Wireless Band</span>
-          </div>
-        </div>
-
-        {/* Interactive Sensors List */}
-        <div className="space-y-2">
-          {electrodes.map((el) => (
-            <div
-              key={el.id}
-              className={`flex items-center justify-between p-2 rounded-xl border transition-colors ${
-                el.ok
-                  ? 'bg-white/5 border-white/10 hover:border-white/20'
-                  : 'bg-rose-500/10 border-rose-500/30'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    if (isSimulator) {
-                      setElectrodeContact(el.id, !el.ok);
-                    }
-                  }}
-                  disabled={!isSimulator}
-                  title={
-                    isSimulator
-                      ? 'Click to simulate dry electrode contact loss'
-                      : 'Controlled by physical BrainBit sensor'
-                  }
-                  className={isSimulator ? 'cursor-pointer' : 'cursor-default opacity-70'}
-                >
-                  {el.ok ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  ) : (
-                    <XCircle className="w-4 h-4 text-rose-400" />
-                  )}
-                </button>
-                <div>
-                  <div className="text-xs font-semibold text-white">{el.name}</div>
-                  <div className="text-[10px] text-slate-400">{el.location}</div>
-                </div>
-              </div>
-
-              <div className="text-right">
-                <span
-                  className={`text-xs font-mono font-medium ${
-                    !isStreamActive
-                      ? 'text-slate-500'
-                      : el.ok
-                      ? 'text-emerald-400'
-                      : 'text-rose-400'
-                  }`}
-                >
-                  {el.impedance}
-                </span>
-                <span className="block text-[9px] text-slate-500">Resistance</span>
-              </div>
-            </div>
-          ))}
-        </div>
+              ? 'text-[#15803d]'
+              : 'text-[#dc2626]'
+          }`}
+        >
+          {!isStreamActive ? 'нет связи' : allGood ? '< 1000 кОм' : 'обрыв канала'}
+        </span>
       </div>
 
-      <p className="text-[10px] text-slate-400 mt-3 pt-2 border-t border-white/10 text-center">
-        {isSimulator
-          ? 'Simulator: click any channel icon above to test contact loss pause.'
-          : 'Physical BLE mode: resistance values require active NeuroSDK2 ResistData stream.'}
-      </p>
-    </GlassPanel>
+      <div className="px-4 py-3 bg-[#ffffff]">
+        <div className="flex items-center justify-center py-1">
+          <svg
+            viewBox="0 0 180 154"
+            className="w-[164px] h-[140px] select-none"
+            aria-label="Схема отведений 10–20"
+          >
+            <path
+              d="M 31 68 C 25 68, 25 92, 31 92"
+              fill="none"
+              stroke="#9ca3af"
+              strokeWidth="1.2"
+            />
+            <path
+              d="M 149 68 C 155 68, 155 92, 149 92"
+              fill="none"
+              stroke="#9ca3af"
+              strokeWidth="1.2"
+            />
+
+            <path
+              d="M 84 21 L 90 11 L 96 21"
+              fill="none"
+              stroke="#6b7487"
+              strokeWidth="1.2"
+              strokeLinejoin="round"
+            />
+
+            <ellipse
+              cx="90"
+              cy="80"
+              rx="58"
+              ry="61"
+              fill="#f8f9fb"
+              stroke="#9ca3af"
+              strokeWidth="1.2"
+            />
+
+            <line
+              x1="90"
+              y1="19"
+              x2="90"
+              y2="141"
+              stroke="rgba(17,24,39,0.08)"
+              strokeWidth="1"
+              strokeDasharray="2 3"
+            />
+            <line
+              x1="32"
+              y1="80"
+              x2="148"
+              y2="80"
+              stroke="rgba(17,24,39,0.08)"
+              strokeWidth="1"
+              strokeDasharray="2 3"
+            />
+
+            {/* Биполярные отведения O1-T3 и O2-T4 */}
+            <line
+              x1="38"
+              y1="80"
+              x2="68"
+              y2="126"
+              stroke={quality.t3 && quality.o1 && isStreamActive ? '#1d5bbf' : '#cbd5e1'}
+              strokeOpacity={quality.t3 && quality.o1 && isStreamActive ? '0.45' : '1'}
+              strokeWidth="1.2"
+              strokeDasharray="3 2"
+            />
+            <line
+              x1="142"
+              y1="80"
+              x2="112"
+              y2="126"
+              stroke={quality.t4 && quality.o2 && isStreamActive ? '#1d5bbf' : '#cbd5e1'}
+              strokeOpacity={quality.t4 && quality.o2 && isStreamActive ? '0.45' : '1'}
+              strokeWidth="1.2"
+              strokeDasharray="3 2"
+            />
+
+            {/* Референт Fpz */}
+            <rect
+              x="83"
+              y="26"
+              width="14"
+              height="5"
+              rx="1.5"
+              fill="#ffffff"
+              stroke="#6b7487"
+              strokeWidth="1"
+            />
+            <text
+              x="90"
+              y="41"
+              textAnchor="middle"
+              fill="#6b7487"
+              fontSize="8"
+              fontFamily="IBM Plex Mono, monospace"
+            >
+              Fpz
+            </text>
+
+            {electrodes.map((el) => {
+              const stroke = !isStreamActive
+                ? '#9ca3af'
+                : el.ok
+                ? '#15803d'
+                : '#dc2626';
+              const fill = !isStreamActive
+                ? '#ffffff'
+                : el.ok
+                ? '#f0fdf4'
+                : '#fef2f2';
+              const textFill = !isStreamActive
+                ? '#6b7487'
+                : el.ok
+                ? '#111827'
+                : '#dc2626';
+
+              return (
+                <g
+                  key={el.id}
+                  onClick={() => handleToggle(el.id, el.ok)}
+                  className={isSimulator ? 'cursor-pointer' : 'cursor-default'}
+                >
+                  <circle cx={el.cx} cy={el.cy} r="10.5" fill={fill} stroke={stroke} strokeWidth="1.35" />
+                  <text
+                    x={el.cx}
+                    y={el.cy + 3}
+                    textAnchor="middle"
+                    fill={textFill}
+                    fontSize="8.5"
+                    fontWeight="500"
+                    fontFamily="IBM Plex Mono, monospace"
+                  >
+                    {el.code}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+
+        <table className="w-full text-xs border-collapse mt-1">
+          <tbody className="divide-y divide-[rgba(17,24,39,0.08)] border-t border-[rgba(17,24,39,0.08)]">
+            {electrodes.map((el) => (
+              <tr
+                key={el.id}
+                onClick={() => handleToggle(el.id, el.ok)}
+                title={isSimulator ? 'Клик — имитация обрыва контакта' : undefined}
+                className={isSimulator ? 'hover:bg-[#f5f7fa] cursor-pointer' : ''}
+              >
+                <td className="py-1.5 font-mono font-medium text-[#111827] w-8">{el.code}</td>
+                <td className="py-1.5 text-[#4b5565]">{el.zone}</td>
+                <td
+                  className={`py-1.5 text-right font-mono tabular-nums ${
+                    !isStreamActive
+                      ? 'text-[#6b7487]'
+                      : el.ok
+                      ? 'text-[#111827]'
+                      : 'text-[#dc2626]'
+                  }`}
+                >
+                  {formatResistance(el.id, el.ok)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 };

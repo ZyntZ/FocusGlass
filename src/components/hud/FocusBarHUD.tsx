@@ -1,260 +1,211 @@
 import React from 'react';
 import {
-  Brain,
   Sliders,
   MousePointerClick,
   Maximize2,
-  Zap,
   Play,
   Pause,
-  AlertCircle,
   Move,
 } from 'lucide-react';
 import { useFocusStore } from '../../stores/useFocusStore';
-import { GlassPanel } from '../glass/GlassPanel';
 
 export const FocusBarHUD: React.FC = () => {
-  const {
-    feedbackState,
-    telemetry,
-    settings,
-    deviceStatus,
-    isClickThrough,
-    toggleClickThrough,
-    setIsSettingsOpen,
-    setViewMode,
-    hudCorner,
-    cycleHudCorner,
-    isPaused,
-    togglePause,
-    activePreset,
-    setPreset,
-  } = useFocusStore();
+  const roundedScore = useFocusStore((s) => Math.round(s.feedbackState.smoothedMetric));
+  const isContactOk = useFocusStore((s) => s.feedbackState.isContactOk);
+  const isArtifactFrozen = useFocusStore((s) => s.feedbackState.isArtifactFrozen);
+  const roundedOpacityPct = useFocusStore((s) => Math.round(s.feedbackState.overlayOpacity * 100));
+  const qt3 = useFocusStore((s) => s.telemetry?.signalQuality.t3 ?? true);
+  const qt4 = useFocusStore((s) => s.telemetry?.signalQuality.t4 ?? true);
+  const qo1 = useFocusStore((s) => s.telemetry?.signalQuality.o1 ?? true);
+  const qo2 = useFocusStore((s) => s.telemetry?.signalQuality.o2 ?? true);
+  const mode = useFocusStore((s) => s.settings.mode);
+  const deviceSource = useFocusStore((s) => s.settings.deviceSource);
+  const threshold = useFocusStore((s) => s.settings.threshold);
+  const connected = useFocusStore((s) => s.deviceStatus.connected);
+  const isClickThrough = useFocusStore((s) => s.isClickThrough);
+  const toggleClickThrough = useFocusStore((s) => s.toggleClickThrough);
+  const setActiveTab = useFocusStore((s) => s.setActiveTab);
+  const setViewMode = useFocusStore((s) => s.setViewMode);
+  const hudCorner = useFocusStore((s) => s.hudCorner);
+  const cycleHudCorner = useFocusStore((s) => s.cycleHudCorner);
+  const isPaused = useFocusStore((s) => s.isPaused);
+  const togglePause = useFocusStore((s) => s.togglePause);
+  const activePreset = useFocusStore((s) => s.activePreset);
+  const setPreset = useFocusStore((s) => s.setPreset);
 
-  const isConcentration = settings.mode === 'concentration';
-  const isSimulator = settings.deviceSource === 'simulator';
-  const isStreamActive = isSimulator || deviceStatus.connected;
+  const isConcentration = mode === 'concentration';
+  const isSimulator = deviceSource === 'simulator';
+  const isStreamActive = isSimulator || connected;
 
-  const score = feedbackState.smoothedMetric;
-  const threshold = settings.threshold;
-  const isBelowThreshold = isStreamActive && feedbackState.isContactOk && score < threshold;
+  const isBelowThreshold = isStreamActive && isContactOk && roundedScore < threshold;
+  const qualityMap = { t3: qt3, t4: qt4, o1: qo1, o2: qo2 };
 
   const cornerClass =
     hudCorner === 'bottom-right'
-      ? 'bottom-5 right-5'
+      ? 'bottom-4 right-4'
       : hudCorner === 'bottom-left'
-      ? 'bottom-5 left-5'
+      ? 'bottom-4 left-4'
       : hudCorner === 'top-left'
-      ? 'top-5 left-5'
-      : 'top-5 right-5';
+      ? 'top-4 left-4'
+      : 'top-4 right-4';
 
   return (
-    <div className={`fixed ${cornerClass} z-50 select-none animate-in fade-in duration-300`}>
-      <GlassPanel
-        variant="primary"
-        glow={isBelowThreshold ? 'orange' : 'cyan'}
-        className="p-3.5 w-80 shadow-2xl backdrop-blur-2xl border-white/20"
+    <div className={`fixed ${cornerClass} z-50 select-none`}>
+      <div
+        className="w-[268px] rounded-md bg-[#ffffff]/96 border border-[rgba(17,24,39,0.18)] p-3 shadow-[0_8px_24px_rgba(0,0,0,0.12)] text-[#111827]"
+        data-tauri-drag-region
       >
-        {/* Top Header */}
-        <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-white/10">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#FF6600] to-[#E64A00] flex items-center justify-center shadow-md">
-              <Brain className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-bold tracking-wide uppercase text-white">
-                  FocusGlass
-                </span>
-                <span className="text-[10px] px-1 py-0.2 rounded bg-orange-500/20 text-[#FF6600] font-mono font-medium">
-                  {isSimulator ? 'SIM' : 'BLE'}
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-400 capitalize">
-                {isConcentration ? 'Beta Focus Mode' : 'Alpha Calm Mode'}
-              </p>
-            </div>
-          </div>
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <span className="text-xs font-medium text-[#111827]">
+            {isConcentration ? 'Концентрация β' : 'Релаксация α'}
+          </span>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
             {isSimulator && (
               <button
                 onClick={() => togglePause()}
-                title={isPaused ? 'Resume Simulation (Space)' : 'Pause Simulation (Space)'}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                title={isPaused ? 'Пуск (Space)' : 'Пауза (Space)'}
+                className="w-6 h-6 rounded inline-flex items-center justify-center text-[#6b7487] hover:text-[#111827] hover:bg-[#eceff4] cursor-pointer"
               >
-                {isPaused ? (
-                  <Play className="w-3.5 h-3.5 text-emerald-400" />
-                ) : (
-                  <Pause className="w-3.5 h-3.5" />
-                )}
+                {isPaused ? <Play size={13} strokeWidth={1.5} /> : <Pause size={13} strokeWidth={1.5} />}
               </button>
             )}
             <button
               onClick={() => cycleHudCorner()}
-              title={`Move HUD Corner (current: ${hudCorner})`}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              title="Угол экрана"
+              className="w-6 h-6 rounded inline-flex items-center justify-center text-[#6b7487] hover:text-[#111827] hover:bg-[#eceff4] cursor-pointer"
             >
-              <Move className="w-3.5 h-3.5" />
+              <Move size={13} strokeWidth={1.5} />
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab('calibration');
+                setViewMode('dashboard');
+              }}
+              title="Параметры БОС"
+              className="w-6 h-6 rounded inline-flex items-center justify-center text-[#6b7487] hover:text-[#111827] hover:bg-[#eceff4] cursor-pointer"
+            >
+              <Sliders size={13} strokeWidth={1.5} />
             </button>
             <button
               onClick={() => setViewMode('dashboard')}
-              title="Open Full Dashboard"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              title="Развернуть окно"
+              className="w-6 h-6 rounded inline-flex items-center justify-center text-[#6b7487] hover:text-[#111827] hover:bg-[#eceff4] cursor-pointer"
             >
-              <Maximize2 className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              title="Settings"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-            >
-              <Sliders className="w-3.5 h-3.5" />
+              <Maximize2 size={13} strokeWidth={1.5} />
             </button>
           </div>
         </div>
 
-        {/* Live Score Display */}
         <div className="flex items-baseline justify-between mb-1.5">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-slate-300 font-medium">
-              {isConcentration ? 'Concentration' : 'Relaxation'}
-            </span>
-            {isStreamActive && feedbackState.isArtifactFrozen && (
-              <span className="text-[10px] text-amber-400 flex items-center gap-0.5">
-                <AlertCircle className="w-2.5 h-2.5" /> Artifact
-              </span>
-            )}
-            {isStreamActive && !feedbackState.isContactOk && (
-              <span className="text-[10px] text-rose-400 flex items-center gap-0.5">
-                <AlertCircle className="w-2.5 h-2.5" /> Contact Lost
-              </span>
-            )}
-            {!isStreamActive && (
-              <span className="text-[10px] text-rose-400 flex items-center gap-0.5">
-                <AlertCircle className="w-2.5 h-2.5" /> Disconnected
-              </span>
-            )}
-          </div>
-          <div className="flex items-baseline gap-1">
+          <div className="flex items-baseline gap-1.5">
             <span
-              className={`text-2xl font-black font-mono tracking-tight ${
-                !isStreamActive || !feedbackState.isContactOk
-                  ? 'text-slate-500'
+              className={`text-xl font-medium font-mono tabular-nums ${
+                !isStreamActive || !isContactOk
+                  ? 'text-[#6b7487]'
                   : isBelowThreshold
-                  ? 'text-[#FF6600]'
-                  : 'text-[#00D2FF]'
+                  ? 'text-[#dc2626]'
+                  : 'text-[#1d5bbf]'
               }`}
             >
-              {isStreamActive && feedbackState.isContactOk ? `${Math.round(score)}%` : '—'}
+              {isStreamActive && isContactOk ? `${roundedScore}%` : '—'}
             </span>
-            <span className="text-xs text-slate-400 font-mono">/ {threshold}%</span>
+            <span className="text-[11px] font-mono tabular-nums text-[#6b7487]">
+              / {threshold}%
+            </span>
           </div>
+
+          <span className="text-[11px] font-mono text-[#6b7487]">
+            {!isStreamActive
+              ? 'нет связи'
+              : !isContactOk
+              ? 'обрыв'
+              : isArtifactFrozen
+              ? 'артефакт'
+              : isBelowThreshold
+              ? `затемн. ${roundedOpacityPct}%`
+              : 'норма'}
+          </span>
         </div>
 
-        {/* The Liquid Glass Focus Bar ("Шкала-столбик") */}
-        <div className="relative h-6 bg-slate-900/80 rounded-full border border-white/15 p-0.5 shadow-inner overflow-hidden mb-3">
-          {/* Threshold target marker */}
+        {/* Шкала текущего индекса с засечкой порога */}
+        <div className="relative h-1.5 bg-[#dfe3eb] rounded-sm mb-2.5 overflow-visible">
           <div
-            className="absolute top-0 bottom-0 w-0.5 bg-white/70 z-20 shadow-[0_0_8px_white]"
-            style={{ left: `${threshold}%` }}
-            title={`Threshold: ${threshold}%`}
-          >
-            <div className="w-1.5 h-1.5 bg-white rounded-full -ml-0.5 -mt-0.5 shadow-sm" />
-          </div>
-
-          {/* Liquid Fill */}
-          <div
-            className={`h-full rounded-full transition-all duration-300 relative overflow-hidden ${
-              isBelowThreshold
-                ? 'bg-gradient-to-r from-red-600 via-[#FF6600] to-[#FFA347]'
-                : 'bg-gradient-to-r from-cyan-600 via-[#00D2FF] to-emerald-400'
+            className={`h-full rounded-sm transition-[width,background-color] duration-150 ${
+              isBelowThreshold ? 'bg-[#dc2626]' : 'bg-[#1d5bbf]'
             }`}
             style={{
               width: `${
-                isStreamActive && feedbackState.isContactOk
-                  ? Math.max(4, Math.min(100, score))
-                  : 0
+                isStreamActive && isContactOk ? Math.max(2, Math.min(100, roundedScore)) : 0
               }%`,
             }}
-          >
-            <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/40 to-transparent" />
-            <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.3)_50%,transparent_100%)] animate-[shimmer_2s_infinite]" />
-          </div>
+          />
+          <div
+            className="absolute -top-1 -bottom-1 w-[1.5px] bg-[#111827]"
+            style={{ left: `${threshold}%` }}
+            title={`Порог: ${threshold}%`}
+          />
         </div>
 
-        {/* Electrode Micro Contact Indicator & Click-Through Button */}
-        <div className="flex items-center justify-between text-xs pt-1">
-          <div className="flex items-center gap-1.5" title="Electrode Contact (T3, T4, O1, O2)">
-            <span className="text-[10px] text-slate-400">Sensors:</span>
+        <div className="flex items-center justify-between pt-2 border-t border-[rgba(17,24,39,0.10)] text-[11px]">
+          <div className="flex items-center gap-2 font-mono">
             {(['t3', 't4', 'o1', 'o2'] as const).map((ch) => {
-              const ok = isStreamActive ? (telemetry?.signalQuality[ch] ?? true) : false;
+              const ok = isStreamActive ? qualityMap[ch] : false;
               return (
                 <span
                   key={ch}
-                  className={`w-2 h-2 rounded-full border ${
-                    ok
-                      ? 'bg-emerald-400 border-emerald-300 shadow-[0_0_6px_rgba(52,211,153,0.8)]'
-                      : 'bg-rose-500 border-rose-400'
-                  }`}
-                  title={`${ch.toUpperCase()}: ${ok ? 'Contact OK' : 'No contact'}`}
-                />
+                  className={ok ? 'text-[#15803d]' : 'text-[#dc2626] line-through'}
+                >
+                  {ch.toUpperCase()}
+                </span>
               );
             })}
           </div>
 
           <button
             onClick={() => toggleClickThrough()}
-            className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium border transition-all cursor-pointer ${
+            className={`h-6 px-2 rounded inline-flex items-center gap-1 border text-[11px] cursor-pointer ${
               isClickThrough
-                ? 'bg-[#00D2FF]/20 text-[#00D2FF] border-[#00D2FF]/40 shadow-[0_0_12px_rgba(0,210,255,0.3)]'
-                : 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/10'
+                ? 'bg-[#1d5bbf] text-white border-[#1d5bbf]'
+                : 'bg-[#f8f9fb] text-[#4b5565] hover:text-[#111827] border-[rgba(17,24,39,0.14)]'
             }`}
-            title="Click-Through passes cursor events through overlay (Ctrl+Shift+G to exit)"
+            title="Пропускать клики сквозь окно (Ctrl+Shift+G)"
           >
-            <MousePointerClick className="w-3 h-3" />
-            <span>{isClickThrough ? 'Click-Thru ON' : 'Interactive'}</span>
+            <MousePointerClick size={12} strokeWidth={1.5} />
+            <span>{isClickThrough ? 'Сквозной' : 'Окно'}</span>
           </button>
         </div>
 
-        {/* Quick Simulator Shortcuts Helper */}
         {isSimulator && (
-          <div className="mt-3 pt-2.5 border-t border-white/10 flex items-center justify-between text-[10px] text-slate-400">
-            <span className="flex items-center gap-1">
-              <Zap className="w-3 h-3 text-amber-400" />
-              Sim Presets:
-            </span>
+          <div className="mt-2 pt-1.5 border-t border-[rgba(17,24,39,0.08)] flex items-center justify-between text-[11px]">
+            <span className="text-[#6b7487]">Режим:</span>
             <div className="flex items-center gap-1">
               {(
                 [
-                  { key: '1', name: 'Focus', preset: 'high_focus' },
-                  { key: '2', name: 'Flow', preset: 'calm_flow' },
-                  { key: '3', name: 'Drop', preset: 'attention_drift' },
-                  { key: '4', name: 'Blink', preset: 'artifact' },
+                  { k: '1', p: 'high_focus', t: 'Фокус' },
+                  { k: '2', p: 'calm_flow', t: 'Поток' },
+                  { k: '3', p: 'attention_drift', t: 'Спад' },
+                  { k: '5', p: 'meditation', t: 'Альфа' },
                 ] as const
-              ).map((p) => (
+              ).map((item) => (
                 <button
-                  key={p.key}
-                  onClick={() => {
-                    if (p.preset === 'artifact') {
-                      useFocusStore.getState().injectArtifact();
-                    } else {
-                      setPreset(p.preset);
-                    }
-                  }}
-                  className={`px-1.5 py-0.5 rounded border text-[10px] transition-colors cursor-pointer ${
-                    activePreset === p.preset
-                      ? 'bg-[#FF6600]/30 text-[#FF6600] border-[#FF6600]/50'
-                      : 'bg-white/5 hover:bg-white/10 text-slate-400 border-white/10'
+                  key={item.k}
+                  type="button"
+                  onClick={() => setPreset(item.p)}
+                  title={item.t}
+                  className={`px-1.5 h-5 rounded text-[11px] font-mono border cursor-pointer ${
+                    activePreset === item.p
+                      ? 'bg-[#1d5bbf] text-white border-[#1d5bbf]'
+                      : 'bg-[#f8f9fb] text-[#4b5565] border-[rgba(17,24,39,0.14)]'
                   }`}
                 >
-                  <kbd className="font-mono font-bold text-white/90">{p.key}</kbd>:{p.name}
+                  {item.k}
                 </button>
               ))}
             </div>
           </div>
         )}
-      </GlassPanel>
+      </div>
     </div>
   );
 };

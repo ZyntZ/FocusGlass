@@ -1,140 +1,107 @@
 import React from 'react';
-import { Target, Wind, Volume2, VolumeX } from 'lucide-react';
 import { useFocusStore } from '../../stores/useFocusStore';
 import { GlassSlider } from '../glass/GlassSlider';
 
 export const BiofeedbackConfig: React.FC = () => {
-  const { settings, updateSettings } = useFocusStore();
+  const settings = useFocusStore((s) => s.settings);
+  const updateSettings = useFocusStore((s) => s.updateSettings);
 
   return (
-    <div className="space-y-4">
-      {/* Mode Selector */}
-      <div>
-        <label className="text-xs font-semibold text-slate-300 block mb-1.5">
-          Training Mode & Target Cognitive Metric
-        </label>
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => updateSettings({ mode: 'concentration' })}
-            className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-              settings.mode === 'concentration'
-                ? 'bg-[#FF6600]/20 border-[#FF6600]/50 shadow-[0_0_16px_rgba(255,102,0,0.25)]'
-                : 'bg-white/5 border-white/10 hover:border-white/20'
-            }`}
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <Target className="w-4 h-4 text-[#FF6600]" />
-              <span className="text-xs font-bold text-white">Concentration (Focus)</span>
-            </div>
-            <p className="text-[11px] text-slate-400">
-              Tracks high-frequency Beta (14-30 Hz) rhythm. Screen dims when attention wanders.
-            </p>
-          </button>
-
-          <button
-            onClick={() => updateSettings({ mode: 'relaxation' })}
-            className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-              settings.mode === 'relaxation'
-                ? 'bg-[#8B5CF6]/20 border-[#8B5CF6]/50 shadow-[0_0_16px_rgba(139,92,246,0.25)]'
-                : 'bg-white/5 border-white/10 hover:border-white/20'
-            }`}
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <Wind className="w-4 h-4 text-[#8B5CF6]" />
-              <span className="text-xs font-bold text-white">Relaxation (Calm)</span>
-            </div>
-            <p className="text-[11px] text-slate-400">
-              Tracks synchronous Alpha (8-13 Hz) rhythm. Screen dims when tension and stress rise.
-            </p>
-          </button>
-        </div>
+    <div className="bg-[#ffffff] border border-[rgba(17,24,39,0.12)] rounded-md overflow-hidden">
+      <div className="h-9 px-4 border-b border-[rgba(17,24,39,0.10)] bg-[#f8f9fb] flex items-center justify-between">
+        <span className="text-xs font-medium text-[#111827]">Параметры контура БОС</span>
+        <span className="text-[11px] font-mono text-[#6b7487]">250 Гц · скользящее окно</span>
       </div>
 
-      {/* Threshold Slider */}
-      <div className="p-3.5 rounded-xl bg-slate-900/50 border border-white/10">
+      <div className="px-4 divide-y divide-[rgba(17,24,39,0.08)]">
+        {/* Выбор целевого ритма */}
+        <div className="grid grid-cols-1 sm:grid-cols-12 items-center gap-2 sm:gap-4 py-3">
+          <span className="sm:col-span-5 text-[13px] text-[#111827]">Целевой ритм тренинга</span>
+          <div className="sm:col-span-7 flex justify-end">
+            <div className="inline-flex rounded-[5px] border border-[rgba(17,24,39,0.14)] bg-[#f8f9fb] p-0.5">
+              <button
+                type="button"
+                onClick={() => updateSettings({ mode: 'concentration' })}
+                className={`px-3 h-7 rounded-[4px] text-xs transition-colors duration-120 cursor-pointer ${
+                  settings.mode === 'concentration'
+                    ? 'bg-[#ffffff] text-[#111827] font-medium shadow-[0_1px_2px_rgba(0,0,0,0.06)]'
+                    : 'text-[#6b7487] hover:text-[#111827]'
+                }`}
+              >
+                Концентрация (β 14–30 Гц)
+              </button>
+              <button
+                type="button"
+                onClick={() => updateSettings({ mode: 'relaxation' })}
+                className={`px-3 h-7 rounded-[4px] text-xs transition-colors duration-120 cursor-pointer ${
+                  settings.mode === 'relaxation'
+                    ? 'bg-[#ffffff] text-[#111827] font-medium shadow-[0_1px_2px_rgba(0,0,0,0.06)]'
+                    : 'text-[#6b7487] hover:text-[#111827]'
+                }`}
+              >
+                Релаксация (α 8–13 Гц)
+              </button>
+            </div>
+          </div>
+        </div>
+
         <GlassSlider
-          label="Target Biofeedback Threshold"
+          label="Порог срабатывания БОС"
           value={settings.threshold}
           min={20}
           max={90}
           step={5}
           unit="%"
-          accentColor={settings.mode === 'concentration' ? 'orange' : 'violet'}
-          description="The cutoff point. Any score below this triggers proportional screen darkening."
+          accentColor="orange"
           onChange={(val) => updateSettings({ threshold: val })}
         />
-      </div>
 
-      {/* Sensitivity & Smoothing */}
-      <div className="p-3.5 rounded-xl bg-slate-900/50 border border-white/10">
         <GlassSlider
-          label="Sensitivity & Moving Average Smoothing"
+          label="Окно скользящего сглаживания"
           value={settings.sensitivitySeconds}
           min={0.5}
           max={5.0}
           step={0.5}
-          unit="s"
+          unit=" с"
           accentColor="cyan"
-          description="Time window for rolling average. Lower = instant reaction; Higher = gentle smooth transitions."
           onChange={(val) => updateSettings({ sensitivitySeconds: val })}
         />
-      </div>
 
-      {/* Visual Dimming & Blur Settings */}
-      <div className="p-3.5 rounded-xl bg-slate-900/50 border border-white/10 space-y-3">
         <GlassSlider
-          label="Maximum Screen Dimming Opacity"
+          label="Предельное затемнение экрана"
           value={Math.round(settings.dimmingMaxOpacity * 100)}
           min={10}
           max={95}
           step={5}
           unit="%"
-          accentColor="orange"
-          description="How dark the screen gets when focus completely drops to zero."
+          accentColor="cyan"
           onChange={(val) => updateSettings({ dimmingMaxOpacity: val / 100 })}
         />
 
         <GlassSlider
-          label="Vignette Optical Blur Radius"
+          label="Радиус размытия периферии"
           value={settings.blurRadius}
           min={0}
           max={32}
           step={2}
-          unit="px"
+          unit=" пкс"
           accentColor="cyan"
-          description="Gaussian backdrop-blur radius applied around the screen periphery during mind-wandering."
           onChange={(val) => updateSettings({ blurRadius: val })}
         />
-      </div>
 
-      {/* Audio Biofeedback Toggle */}
-      <div className="p-3.5 rounded-xl bg-slate-900/50 border border-white/10 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-xl ${settings.audioFeedbackEnabled ? 'bg-orange-500/20 text-[#FF6600]' : 'bg-white/5 text-slate-400'}`}>
-            {settings.audioFeedbackEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+        <label className="grid grid-cols-12 items-center gap-4 py-3 cursor-pointer">
+          <span className="col-span-8 text-[13px] text-[#111827]">
+            Аудиоканал БОС (модуляция розового шума ниже порога)
+          </span>
+          <div className="col-span-4 flex justify-end">
+            <input
+              type="checkbox"
+              checked={settings.audioFeedbackEnabled}
+              onChange={(e) => updateSettings({ audioFeedbackEnabled: e.target.checked })}
+              className="w-4 h-4 accent-[#1d5bbf] cursor-pointer"
+            />
           </div>
-          <div>
-            <span className="text-xs font-semibold text-white block">
-              Audio-БОС (Nature / Pink Noise Modulation)
-            </span>
-            <span className="text-[11px] text-slate-400">
-              Gentle ambient sound intensity scales smoothly when focus drops.
-            </span>
-          </div>
-        </div>
-
-        <button
-          onClick={() => updateSettings({ audioFeedbackEnabled: !settings.audioFeedbackEnabled })}
-          className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer border ${
-            settings.audioFeedbackEnabled ? 'bg-[#FF6600] border-[#FF6600]' : 'bg-slate-800 border-white/20'
-          }`}
-        >
-          <div
-            className={`w-4 h-4 rounded-full bg-white transition-transform transform ${
-              settings.audioFeedbackEnabled ? 'translate-x-6' : 'translate-x-1'
-            }`}
-          />
-        </button>
+        </label>
       </div>
     </div>
   );

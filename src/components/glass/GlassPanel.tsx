@@ -11,29 +11,16 @@ interface GlassPanelProps extends React.HTMLAttributes<HTMLDivElement> {
 export const GlassPanel: React.FC<GlassPanelProps> = ({
   children,
   className = '',
-  variant = 'primary',
-  glow = 'none',
-  hasSpecular = true,
+  variant = 'card',
   ...props
 }) => {
-  const baseClass = variant === 'card' ? 'liquid-glass-card' : 'liquid-glass';
-  const glowClass =
-    glow === 'orange'
-      ? 'glow-orange'
-      : glow === 'cyan'
-      ? 'glow-cyan'
-      : glow === 'violet'
-      ? 'glow-violet'
-      : glow === 'green'
-      ? 'glow-green'
-      : '';
-  const specularClass = hasSpecular ? 'liquid-glass-bevel' : '';
+  const surface =
+    variant === 'subtle'
+      ? 'bg-[#f8f9fb] border border-[rgba(17,24,39,0.10)] rounded-md'
+      : 'bg-[#ffffff] border border-[rgba(17,24,39,0.10)] rounded-md';
 
   return (
-    <div
-      className={`rounded-2xl transition-all duration-300 ${baseClass} ${glowClass} ${specularClass} ${className}`}
-      {...props}
-    >
+    <div className={`${surface} ${className}`} {...props}>
       {children}
     </div>
   );
